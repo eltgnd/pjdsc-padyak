@@ -1,0 +1,1 @@
+pip install torch transformers pillow matplotlib numpy timm opencv-python
