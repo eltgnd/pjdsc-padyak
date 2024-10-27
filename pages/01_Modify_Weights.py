@@ -472,6 +472,11 @@ if __name__ == "__main__":
 
     tab_main, tab_sub = st.tabs([f":one: Main Components for {mode_option}", f":two: Subcomponents for {mode_option}"])
 
+    with tab_sub:
+        for subcomp_name, d in ss["subcomp_info"].items():
+            if ("levels_ALL" in d) or (""):
+                pass
+
     with tab_main:
         for maincomp_name, d in maincomp_info_reference.items():
             exp_title = f"{d['display_name']}"
@@ -509,6 +514,8 @@ if __name__ == "__main__":
 
                             to_concat.append(prefix + current_term)
 
+                        st.caption("Formula:")
+
                         with st.container(border = True):
-                            st.caption(f"*{d['display_name']} formula*\n\n = " + "\n\n".join(to_concat))
-                            st.markdown("Based on currently set weights of subcomponents.")
+                            st.markdown("\n\n".join(to_concat))
+                            st.caption("Based on currently set weights of subcomponents.")
