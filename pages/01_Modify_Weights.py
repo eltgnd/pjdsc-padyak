@@ -1,5 +1,10 @@
 # Packages
 import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import altair as alt
 
 # Variables
 ss = st.session_state
@@ -95,6 +100,7 @@ def load_discomfort_score_component_info():
                 "destination": -1,
                 "no": 3,
             },
+            "INCLUDE_IN": {"CYCLE"},
         },
         "CYCLEWAY_CLASS": {
             "display_name": "Bike Lane Class",
@@ -103,7 +109,8 @@ def load_discomfort_score_component_info():
                 "class 1": -4,
                 "class 2": -2,
                 "class 3": -1,
-            }
+            },
+            "INCLUDE_IN": {"CYCLE"},
         },
         "CYCLEWAY_LANE_TYPE": {
             "display_name": "Shared Bike Lane",
@@ -111,7 +118,8 @@ def load_discomfort_score_component_info():
             "levels_CYCLE": {
                 "exclusive lane": -1,
                 "shared lane": 1,
-            }
+            },
+            "INCLUDE_IN": {"CYCLE"},
         },
         "foot": {
             "display_name": "Foot Path Type",
@@ -130,12 +138,13 @@ def load_discomfort_score_component_info():
                 "designated": -1,
                 "use_sidepath": 2,
             },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "highway": {
             "display_name": "Street Type",
             "description": "The type of street, if it is intended for pedestrians and/or cyclists. In the pedestrian network, paths marked `steps` indicate that one must use stairs, such as stairs at a footbridge.",
             "levels_CYCLE": {
-                "living_street": -4,
+                "living street": -4,
                 "pedestrian": -3,
                 "footway": -2,
                 "path": -1,
@@ -144,18 +153,19 @@ def load_discomfort_score_component_info():
             "levels_DISMOUNT": {
                 "footway": -4,
                 "pedestrian": -3,
-                "living_street": -2,
+                "living street": -2,
                 "path": -1,
                 "residential": -0.5,
             },
             "levels_WALK": {
                 "footway": -4,
                 "pedestrian": -3,
-                "living_street": -2,
+                "living street": -2,
                 "path": -1,
                 "residential": -0.5,
                 "steps": 1,
             },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "ALLEY": {
             "display_name": "Alley",
@@ -172,10 +182,12 @@ def load_discomfort_score_component_info():
                 "alley": -1,
                 "not alley": 0,
             },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "width": {
             "display_name": "Width of Road",
             "description": "Road width in meters. **This subcomponent is calculated as 3 minus the actual road width.** For example, a 3m wide road is scored 0, and a 2m wide road is scored -1.",
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "lit": {
             "display_name": "Presence of Illumination",
@@ -184,86 +196,94 @@ def load_discomfort_score_component_info():
                 "yes": -1,
                 "no": 0
             },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "maxspeed": {
             "display_name": "Legal Speed Limit",
             "description": "The legal speed limit for motorists on this road.",
             "levels_ALL": {
-                "less than 30 km/h": -1,
+                "< 30 km/h": -1,
                 "30 km/h": 0,
-                "greater than 30 km/h": 1,
+                "> 30 km/h": 1,
             },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "segregated": {
-            "display_name": "Segregation of Path Used by Both Pedestrians and Cyclists",
+            "display_name": "Segregation of Pedestrian-Cyclist Paths",
             "description": "Whether a path used by both pedestrians and cyclists has segregated lanes separating the two.",
             "levels_ALL": {
                 "yes": 0,
                 "no": 1,
-            }
+            },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "sidewalk": {
             "display_name": "Sidewalk Presence beside Road",
-            "description": "Whether one, neither, or both of the sides of a road section have a sidewalk. Note this component is set to 0 for streets in the cycling network that permit cycling or have a bike lane, i.e., it does not have an effect on discomfort in that case",
+            "description": "Whether one, neither, or both of the sides of a road section have a sidewalk. Note this component is set to 0 for streets in the cycling network that permit cycling or have a bike lane, i.e., it does not have an effect on discomfort in that case.",
             "levels_ALL": {
-                "left side: present": -1,
-                "right side: present": -1,
+                "left: present": -1,
+                "right: present": -1,
             },
-            "is_multi": True, # this means a single street can be affected by multiple of these conditions
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
+            "extra_explanation": "(Both sides of the road count toward the score. If both sides have a sidewalk, the score is -2.)"
         },
         "PARKING_SUBTAGS": {
             "display_name": "Parking Presence beside Road",
             "description": "Whether a road section has parking on or adjacent to it.",
             "levels_CYCLE": {
-                "left side: no parking": -1,
-                "right side: no parking": -1,
-                "left side: parking is half-on-curb": 0.5,
-                "right side: parking is half-on-curb": 0.5,
-                "left side: parking lane on road": 1,
-                "right side: parking lane on road": 1,
+                "left: none": -1,
+                "right: none": -1,
+                "left: half-on-curb": 0.5,
+                "right: half-on-curb": 0.5,
+                "left: on street": 1,
+                "right: on street": 1,
             },
             "levels_DISMOUNT": {
-                "left side: no parking": -0.5,
-                "right side: no parking": -0.5,
-                "left side: parking is half-on-curb": 1,
-                "right side: parking is half-on-curb": 1,
-                "left side: parking lane on road": 0.5,
-                "right side: parking lane on road": 0.5,
+                "left: none": -0.5,
+                "right: none": -0.5,
+                "left: half-on-curb": 1,
+                "right: half-on-curb": 1,
+                "left: on street": 0.5,
+                "right: on street": 0.5,
             },
             "levels_WALK": {
-                "left side: no parking": -0.5,
-                "right side: no parking": -0.5,
-                "left side: parking is half-on-curb": 1,
-                "right side: parking is half-on-curb": 1,
-                "left side: parking lane on road": 0.5,
-                "right side: parking lane on road": 0.5,
+                "left: none": -0.5,
+                "right: none": -0.5,
+                "left: half-on-curb": 1,
+                "right: half-on-curb": 1,
+                "left: on street": 0.5,
+                "right: on street": 0.5,
             },
-            "is_multi": True
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
+            "extra_explanation": "(Both sides of the road count toward the score.)"
         },
         "TAG_crossing": {
-            "display_name": "Unmarked/Informal Crosswalk",
+            "display_name": "Crosswalk Type",
             "description": "Whether or not a crosswalk is unmarked/informal.",
             "levels_ALL": {
                 "ordinary": 0,
-                "unmarked/informal": 1
-            }
+                r"unmarked/\ninformal": 1
+            },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "motor_vehicle": {
-            "display_name": "Motor vehicle access",
+            "display_name": "Motor Vehicle Access",
             "description": "Whether motor vehicles may use this section of a street.",
             "levels_ALL": {
-                "motor vehicles not permitted": -2,
-                "cars not permitted": -1,
-            }
+                "no motorists": -2,
+                "no cars": -1,
+            },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
         "EDSA_accident_component": {
-            "display_name": "Relative accident risk",
+            "display_name": "Accident Risk",
             "description": "Relative risk of a motor vehicle accident on the road section. **In the current version**, only sections of EDSA have data on accident risk, based on the number of accidents that occurred on each road section in the most recent available year of data.",
             "levels_ALL": {
                 "<= 5 accidents/year": 0,
                 "5 - 20 accidents/year": 1,
                 ">20 accidents/year": 2,
-            }
+            },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
         },
 
         # FROM IMAGE DATA
@@ -271,27 +291,25 @@ def load_discomfort_score_component_info():
             "display_name": "Cycling Lane Coverage",
             "description": "For roads with bike lanes, this component reflects the percentage of the road area that is occupied by the bike lane, based on the average from multiple pictures taken on the street. This component is a number between -1 and 0, with a lower number indicating a greater percentage of the road being taken up by the bike lane.",
             "is_computer_vision": True,
-            "EXCLUDE_IN_DISMOUNT": True,
-            "EXCLUDE_IN_WALK": True,
+            "INCLUDE_IN": {"CYCLE"},
         },
         "FROM_IMAGES_sidewalk_ratio": {
             "display_name": "Sidewalk Ratio",
             "description": "For roads with sidewalks, this component reflects the area of the sidewalk relative to the road area, based on the average from multiple pictures taken on the street. This component is a number between -1 and 0, with a lower number indicating that the sidewalk occupies more space (relative to the road that it is on).",
-            "EXCLUDE_IN_CYCLE": True,
-            "EXCLUDE_IN_DISMOUNT": True,
+            "INCLUDE_IN": {"WALK"},
             "is_computer_vision": True,
         },
         "FROM_IMAGES_obstruction_density": {
             "display_name": "Obstruction Density",
             "description": "An estimate of the level of presence of obstructions to pedestrians or cyclists on a street section. This is scored by a decimal between -1 and 0, with a lower number meaning fewer obstructions.",
-            "EXCLUDE_IN_CYCLE": True,
-            "EXCLUDE_IN_DISMOUNT": True,
+            "INCLUDE_IN": {"WALK"},
             "is_computer_vision": True,
         },
         
         "FROM_IMAGES_greenery_ratio": {
             "display_name": "Greenery Ratio",
             "description": "An estimate of the amount of greenery present, on average, in photos taken on this street. This is scored by a decimal between -1 and 0, with a lower number meaning more greenery.",
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
             "is_computer_vision": True,
         },
         "FROM_IMAGES_road_condition": {
@@ -301,6 +319,7 @@ def load_discomfort_score_component_info():
                 "good condition": -1,
                 "poor condition": 0,
             },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
             "is_computer_vision": True,
         },
         "FROM_IMAGES_has_crosswalk": {
@@ -310,6 +329,7 @@ def load_discomfort_score_component_info():
                 "crosswalk seen in photos": -1,
                 "no crosswalks": 0,
             },
+            "INCLUDE_IN": {"WALK", "CYCLE", "DISMOUNT"},
             "is_computer_vision": True,
         },
         "FROM_IMAGES_has_bicycle": {
@@ -319,6 +339,7 @@ def load_discomfort_score_component_info():
                 "cyclist seen in photos": -1,
                 "no cyclists": 0,
             },
+            "INCLUDE_IN": {"CYCLE"},
             "is_computer_vision": True,
         },
         "FROM_IMAGES_has_traffic_light": {
@@ -328,6 +349,7 @@ def load_discomfort_score_component_info():
                 "traffic light seen in photos": -1,
                 "no traffic lights": 0,
             },
+            "INCLUDE_IN": {"WALK"},
             "is_computer_vision": True,
         },
     }
@@ -415,6 +437,107 @@ def load_discomfort_score_component_info():
 
     return default_weights_subcomponents_bike, default_weights_main_components_bike, default_weights_subcomponents_walk, default_weights_main_components_walk, subcomponent_name_to_display_info, bike_main_component_name_to_display_info, walk_main_component_name_to_display_info
 
+
+@st.cache_data(ttl = None)
+def make_chart_for_subcomponent(subcomp_name, subcomp_group):
+    d = ss["subcomp_info"][subcomp_name]
+    levels_dict = d.get("levels_ALL", d.get(f"levels_{subcomp_group}", None))
+
+    reverse_df = pd.Series({value: ", ".join([f"'{key}'" for key in levels_dict if levels_dict[key] == value]) for value in levels_dict.values()})
+    reverse_df.index.name = "Score"
+    reverse_df.name = "Levels"
+    reverse_df = reverse_df.reset_index(drop = False)
+    reverse_df["Zero"] = 0
+    reverse_df["Levels_Display"] = reverse_df["Levels"].str.replace(", ", r"\n")
+
+    xlim_left = min([-0.25, reverse_df["Score"].min() - 0.25])
+    xlim_right = max([0.25, reverse_df["Score"].max() + 0.25])
+
+    base = alt.Chart(
+        reverse_df
+    ).mark_point(
+        filled = True,
+        size = 800,
+        color = "blue",
+        opacity = 1
+    ).encode(
+        x = alt.X("Score:Q", title = f"Effect on Discomfort Score", scale = alt.Scale(domain = [xlim_left, xlim_right])),
+        y = alt.Y("Zero:Q", scale=alt.Scale(domain=[-1, 1])),
+        tooltip = ["Levels", "Score"]
+    )
+
+    text_of_levels = base.mark_text(
+        dy=-30,
+        lineBreak=r'\n',
+        baseline = "line-bottom",
+        align = "left",
+        angle = 345,
+        size=13
+    ).encode(
+        text = "Levels_Display:N",
+    )
+
+    text_in_points = base.mark_text(
+        dy=0,
+        lineBreak=r'\n',
+        baseline = "middle",
+        align = "center",
+        angle = 0,
+        size=13,
+        color = "white",
+    ).encode(
+        text = alt.Text("Score:Q", format = "+", formatType = "number"),
+    )
+
+    red_point = alt.Chart().mark_point(color = "darkred", filled = True, tooltip = False, size = 800, opacity = 1).encode(x=alt.datum(0), y = alt.datum(0))
+
+    hline = alt.Chart(reverse_df).mark_rule(color = "black", strokeWidth = 3, tooltip = False).encode(y = alt.datum(0))
+
+    vline = alt.Chart(reverse_df).mark_rule(strokeDash = [6,5], strokeWidth = 3, color = "darkred", tooltip = False).encode(x = alt.datum(0), y = alt.datum(-0.7), y2 = alt.datum(0))
+
+    vline_text = vline.mark_text(
+        dy = 10, color = "darkred", tooltip = False, size = 12, lineBreak=r'\n',
+    ).encode(
+        text = alt.datum(r"Zero effect\n(default when unspecified)")
+    )
+
+    chart = (hline + vline + base + red_point + text_in_points + text_of_levels + vline_text
+    ).configure_axisX(
+        tickMinStep = 0.5,
+        format = "+", # numbers should be signed
+        formatType = "number",
+        labelFontSize = 15,
+        grid = True
+    ).configure_axisY(
+        disable = True,
+    ).properties(
+        width=450,
+        height=250
+    )
+
+    return chart
+
+@st.cache_data(experimental_allow_widgets=True)
+def show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group):
+    with st.expander(exp_title, expanded = False):
+
+        d = ss["subcomp_info"][subcomp_name]
+
+        st.markdown(f"### {d['display_name']}")
+        st.markdown(d['description'])
+
+        levels_dict = d.get("levels_ALL", d.get(f"levels_{subcomp_group}", None))
+            
+        if levels_dict is not None:
+
+            with st.container(border = True):
+                st.altair_chart(make_chart_for_subcomponent(subcomp_name, subcomp_group))
+
+            if "extra_explanation" in d:
+                st.caption(d['extra_explanation'])
+
+    return None
+
 # Main
 
 if __name__ == "__main__":
@@ -444,19 +567,19 @@ if __name__ == "__main__":
         ss["CHANGE_WEIGHTS_mode_just_changed"] = True
 
     mode_option = st.radio(
-        "Edit weights for:",
-        options = ["Cyclist Discomfort", "Pedestrian Discomfort"],
+        "Mode of active transport",
+        options = ["Cycling", "Walking"],
         horizontal = True,
         on_change = on_change_mode,
     )
 
     if ss["CHANGE_WEIGHTS_mode_just_changed"] or ("CHANGE_WEIGHTS_mode_just_changed" not in ss):
-        if mode_option == "Cyclist Discomfort":
+        if mode_option == "Cycling":
             ss['CHANGE_WEIGHTS_maincomp_info_reference'] = ss["b_maincomp_info"]
             ss['CHANGE_WEIGHTS_sub_weights_reference'] = ss["weights_sub_bike"]
             ss['CHANGE_WEIGHTS_main_weights_reference'] = ss["weights_main_bike"]
     
-        elif mode_option == "Pedestrian Discomfort":
+        elif mode_option == "Walking":
             ss['CHANGE_WEIGHTS_maincomp_info_reference'] = ss["w_maincomp_info"]
             ss['CHANGE_WEIGHTS_sub_weights_reference'] = ss["weights_sub_walk"]
             ss['CHANGE_WEIGHTS_main_weights_reference'] = ss["weights_main_walk"]
@@ -468,27 +591,108 @@ if __name__ == "__main__":
     main_weights_reference = ss["CHANGE_WEIGHTS_main_weights_reference"]
     sub_weights_reference = ss["CHANGE_WEIGHTS_sub_weights_reference"]
 
-    st.divider()
+    if (mode_option == "Walking"):
 
-    tab_main, tab_sub = st.tabs([f":one: Main Components for {mode_option}", f":two: Subcomponents for {mode_option}"])
+        tab_main, tab_sub = st.tabs([f":one: Main Components ({mode_option})", f":two: Subcomponents ({mode_option})"])
 
-    with tab_sub:
-        for subcomp_name, d in ss["subcomp_info"].items():
-            if ("levels_ALL" in d) or (""):
-                pass
+        with tab_sub:
+                
+            for subcomp_name, d in ss["subcomp_info"].items():
 
+                feature_is_relevant = "WALK" in d["INCLUDE_IN"]
+
+                if feature_is_relevant:
+
+                    exp_title = f"{d['display_name']}"
+
+                    col1, col2 = st.columns([1, 3])
+
+                    with col1:
+                        this_key = f"CHANGE_WEIGHTS_walk_SUB_{subcomp_name}"
+                        st.number_input(
+                            this_key,
+                            value = 1.0,
+                            step = 0.1,
+                            key = this_key,
+                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                        )
+
+                    with col2:
+                        show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="WALK")
+
+    elif (mode_option == "Cycling"):
+
+        tab_main, tab_sub_cycle, tab_sub_dismount = st.tabs([f":one: Main Components (Walking)", f":two: Subcomponents (Cycling)", f":three: Subcomponents (Dismount)"])
+
+        with tab_sub_cycle:
+
+            st.info("These are the subcomponents for paths where **cycling is permitted**.", icon = "❗")
+
+            for subcomp_name, d in ss["subcomp_info"].items():
+
+                feature_is_relevant = "CYCLE" in d["INCLUDE_IN"]
+
+                if feature_is_relevant:
+
+                    exp_title = f"{d['display_name']}"
+
+                    col1, col2 = st.columns([1, 3])
+
+                    with col1:
+                        this_key = f"CHANGE_WEIGHTS_cycle_SUB_{subcomp_name}"
+                        st.number_input(
+                            this_key,
+                            value = 1.0,
+                            step = 0.1,
+                            key = this_key,
+                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                        )
+
+                    with col2:
+                        show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="CYCLE")
+
+        with tab_sub_dismount:
+
+            st.info("These are the subcomponents describing **non-cyclable paths**, where cyclists must dismount and push their bikes.", icon = "❗")
+
+            for subcomp_name, d in ss["subcomp_info"].items():
+
+                feature_is_relevant = "DISMOUNT" in d["INCLUDE_IN"]
+
+                if feature_is_relevant:
+
+                    exp_title = f"{d['display_name']}"
+
+                    col1, col2 = st.columns([1, 3])
+
+                    with col1:
+                        this_key = f"CHANGE_WEIGHTS_dismount_SUB_{subcomp_name}"
+                        st.number_input(
+                            this_key,
+                            value = 1.0,
+                            step = 0.1,
+                            key = this_key,
+                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                        )
+
+                    with col2:
+                        show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="DISMOUNT")
+                        
+
+    # The ff code applies to both Walking and Cycling        
     with tab_main:
         for maincomp_name, d in maincomp_info_reference.items():
             exp_title = f"{d['display_name']}"
 
-            col1, col2 = st.columns([1, 2])
+            col1, col2 = st.columns([1, 3])
 
             with col1:
+                this_key = f"CHANGE_WEIGHTS_{mode_option}_MAIN_{maincomp_name}"
                 st.number_input(
-                    "",
+                    this_key,
                     value = 1.0,
                     step = 0.01,
-                    key = f"CHANGE_WEIGHTS_{mode_option}_MAIN_{d['display_name']}",
+                    key = this_key,
                     label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
                 )
 
@@ -518,4 +722,4 @@ if __name__ == "__main__":
 
                         with st.container(border = True):
                             st.markdown("\n\n".join(to_concat))
-                            st.caption("Based on currently set weights of subcomponents.")
+                            st.caption("Based on currently set weights of subcomponents. You can change these in the Subcomponents tab.")
