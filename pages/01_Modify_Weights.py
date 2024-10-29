@@ -121,6 +121,27 @@ def show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group):
 
     return None
 
+def generate_terms_of_formula(d, ss_weights_key):
+    to_concat = []
+
+    for subcomp_name in d['subcomponents']:
+
+        if subcomp_name in ss[ss_weights_key]:
+
+            subcomp_display_name = subcomponent_name_to_display_info[subcomp_name]["display_name"]
+
+            subcomp_weight = round(ss[ss_weights_key][subcomp_name], 2)
+
+            current_term = f"(**{round(subcomp_weight, 2)}** x {subcomp_display_name})"
+
+            prefix = "" if len(to_concat) == 0 else "\+ "
+
+            to_concat.append(prefix + current_term)
+
+            result = "\n\n".join(to_concat)
+
+    return result
+
 # Main
 
 if __name__ == "__main__":
@@ -145,37 +166,21 @@ if __name__ == "__main__":
     if "walk_maincomp_info" not in ss:
         ss["w_maincomp_info"] = walk_main_component_name_to_display_info
 
-    if "CHANGE_WEIGHTS_mode_just_changed" not in ss:
-        ss["CHANGE_WEIGHTS_mode_just_changed"] = True
-
-    def on_change_mode():
-        ss["CHANGE_WEIGHTS_mode_just_changed"] = True
+    
 
     mode_option = st.radio(
         "Mode of active transport",
         options = ["Cycling", "Walking"],
         horizontal = True,
-        on_change = on_change_mode,
     )
 
-    if ss["CHANGE_WEIGHTS_mode_just_changed"] or ("CHANGE_WEIGHTS_mode_just_changed" not in ss):
-        if mode_option == "Cycling":
-            ss['CHANGE_WEIGHTS_maincomp_info_reference'] = ss["b_maincomp_info"]
-            ss['CHANGE_WEIGHTS_sub_weights_reference'] = ss["weights_sub_bike_CYCLE"]
-            ss['CHANGE_WEIGHTS_sub_weights_reference_DISMOUNT'] = ss["weights_sub_bike_DISMOUNT"]
-            ss['CHANGE_WEIGHTS_main_weights_reference'] = ss["weights_main_bike"]
-    
-        elif mode_option == "Walking":
-            ss['CHANGE_WEIGHTS_maincomp_info_reference'] = ss["w_maincomp_info"]
-            ss['CHANGE_WEIGHTS_sub_weights_reference'] = ss["weights_sub_walk"]
-            ss['CHANGE_WEIGHTS_main_weights_reference'] = ss["weights_main_walk"]
+    if mode_option == "Cycling":
+        maincomp_info_reference = ss["b_maincomp_info"]
+        sskey_main_weights = "weights_main_bike"
 
-    # Revert to False
-    ss["CHANGE_WEIGHTS_mode_just_changed"] = False
-
-    maincomp_info_reference = ss["CHANGE_WEIGHTS_maincomp_info_reference"]
-    main_weights_reference = ss["CHANGE_WEIGHTS_main_weights_reference"]
-    sub_weights_reference = ss["CHANGE_WEIGHTS_sub_weights_reference"]
+    elif mode_option == "Walking":
+        maincomp_info_reference = ss["w_maincomp_info"]
+        sskey_main_weights = "weights_main_walk"
 
     if (mode_option == "Walking"):
 
@@ -269,7 +274,6 @@ if __name__ == "__main__":
 
                     with col2:
                         show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="DISMOUNT")
-                        
 
     # The ff code applies to both Walking and Cycling        
     with tab_main:
@@ -280,17 +284,14 @@ if __name__ == "__main__":
 
             with col1:
                 this_key = f"CHANGE_WEIGHTS_{mode_option}_MAIN_{maincomp_name}"
-                st.number_input(
+                result = st.number_input(
                     this_key,
-                    value = float(
-                        default_weights_main_components_bike[maincomp_name]
-                        if mode_option == "Cycling"
-                        else default_weights_main_components_walk[maincomp_name]
-                    ),
+                    value = float(ss[sskey_main_weights][maincomp_name]),
                     step = 0.01,
                     key = this_key,
                     label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
                 )
+                ss[sskey_main_weights][maincomp_name] = result
 
             with col2:
 
@@ -301,27 +302,6 @@ if __name__ == "__main__":
                     if 'subcomponents' in d:
 
                         with st.container(border = True):
-
-                            def generate_terms_of_formula(d, ss_weights_key):
-                                to_concat = []
-
-                                for subcomp_name in d['subcomponents']:
-
-                                    if subcomp_name in ss[ss_weights_key]:
-
-                                        subcomp_display_name = subcomponent_name_to_display_info[subcomp_name]["display_name"]
-
-                                        subcomp_weight = round(ss[ss_weights_key][subcomp_name], 2)
-
-                                        current_term = f"(**{round(subcomp_weight, 2)}** x {subcomp_display_name})"
-
-                                        prefix = "" if len(to_concat) == 0 else "\+ "
-
-                                        to_concat.append(prefix + current_term)
-
-                                        result = "\n\n".join(to_concat)
-
-                                return result
 
                             if mode_option == "Walking":
 

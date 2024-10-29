@@ -551,4 +551,5 @@ if __name__ == "__main__":
             result = pd.Series(entries, index = ss["Gw_edges"].index)
             ss["Gw_edges_discomfort"] = result
 
-            st.write(ss["Gw_edges_discomfort"].min())
+            # TEST ONLY
+            st.write(ss["Gw_edges_discomfort"].mean())
