@@ -100,7 +100,7 @@ def make_chart_for_subcomponent(subcomp_name, subcomp_group):
 
     return chart
 
-@st.cache_data() # no need to set experimental_allow_widgets=True
+@st.cache_data(experimental_allow_widgets=True) # no need to set experimental_allow_widgets=True
 def show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group):
     with st.expander(exp_title, expanded = False):
 
@@ -142,6 +142,10 @@ def generate_terms_of_formula(d, ss_weights_key):
 
     return result
 
+def update_weights_dict_from_key(sskey_weights_TEMP, component_name, data_key):
+    ss[sskey_weights_TEMP][component_name] = ss[data_key]
+    return None
+
 # Main
 
 if __name__ == "__main__":
@@ -165,8 +169,6 @@ if __name__ == "__main__":
         ss["b_maincomp_info"] = bike_main_component_name_to_display_info
     if "walk_maincomp_info" not in ss:
         ss["w_maincomp_info"] = walk_main_component_name_to_display_info
-
-    
 
     mode_option = st.radio(
         "Mode of active transport",
@@ -202,13 +204,16 @@ if __name__ == "__main__":
                         this_key = f"CHANGE_WEIGHTS_walk_SUB_{subcomp_name}"
                         result = st.number_input(
                             this_key,
-                            # value = float(ss["weights_sub_walk"][subcomp_name]),
-                            value = float(default_weights_subcomponents_walk[subcomp_name]),
+                            value = float(ss["weights_sub_walk"][subcomp_name]),
                             step = 0.1,
                             key = this_key,
-                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                            label_visibility = "collapsed", # necessary to remove the space above the input box that is left by the empty label
+                            on_change = update_weights_dict_from_key,
+                            args = ("weights_sub_walk", subcomp_name, this_key)
                         )
-                        ss["weights_sub_walk"][subcomp_name] = result
+
+                        # ### FOR VERIFICATION
+                        # st.write(ss["weights_sub_walk"][subcomp_name])
 
                     with col2:
                         show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="WALK")
@@ -239,9 +244,13 @@ if __name__ == "__main__":
                             value = float(default_weights_subcomponents_bike_CYCLE[subcomp_name]),
                             step = 0.1,
                             key = this_key,
-                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                            label_visibility = "collapsed", # necessary to remove the space above the input box that is left by the empty label
+                            on_change = update_weights_dict_from_key,
+                            args = ("weights_sub_bike_CYCLE", subcomp_name, this_key)
                         )
-                        ss["weights_sub_bike_CYCLE"][subcomp_name] = result
+
+                        # ### FOR VERIFICATION
+                        # st.write(ss["weights_sub_bike_CYCLE"][subcomp_name])
 
                     with col2:
                         show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="CYCLE")
@@ -268,12 +277,17 @@ if __name__ == "__main__":
                             value = float(default_weights_subcomponents_bike_DISMOUNT[subcomp_name]),
                             step = 0.1,
                             key = this_key,
-                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                            label_visibility = "collapsed", # necessary to remove the space above the input box that is left by the empty label
+                            on_change = update_weights_dict_from_key,
+                            args = ("weights_sub_bike_DISMOUNT", subcomp_name, this_key)
                         )
-                        ss["weights_sub_bike_DISMOUNT"][subcomp_name] = result
+
+                        # ### FOR VERIFICATION
+                        # st.write(ss["weights_sub_bike_DISMOUNT"][subcomp_name])
 
                     with col2:
                         show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="DISMOUNT")
+
 
     # The ff code applies to both Walking and Cycling        
     with tab_main:
@@ -283,15 +297,20 @@ if __name__ == "__main__":
             col1, col2 = st.columns([1, 3])
 
             with col1:
+
                 this_key = f"CHANGE_WEIGHTS_{mode_option}_MAIN_{maincomp_name}"
                 result = st.number_input(
                     this_key,
                     value = float(ss[sskey_main_weights][maincomp_name]),
-                    step = 0.01,
+                    step = 0.1,
                     key = this_key,
-                    label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                    label_visibility = "collapsed", # necessary to remove the space above the input box that is left by the empty label
+                    on_change = update_weights_dict_from_key,
+                    args = (sskey_main_weights, maincomp_name, this_key),
                 )
-                ss[sskey_main_weights][maincomp_name] = result
+
+                # # FOR VERIFICATION
+                # st.write(ss[sskey_main_weights][maincomp_name])
 
             with col2:
 
@@ -330,6 +349,3 @@ if __name__ == "__main__":
                                 st.divider()
 
                             st.caption("Based on currently set weights of subcomponents. You can change these in the Subcomponents tab.")
-
-    # # TEST ONLY
-    # st.write(ss["weights_sub_bike_CYCLE"]["FROM_IMAGES_has_bicycle"])
