@@ -482,8 +482,6 @@ if __name__ == "__main__":
 
     if any([key not in ss for key in ["Gb_edges", "Gb_nodes", "Gw_edges", "Gw_nodes"]]):
         Gb_edges, Gb_nodes, Gw_edges, Gw_nodes = load_nodes_and_edges()
-        # Gb_edges["PROGRESS_PERCENTAGE"] = [x / Gb_edges.shape[0] for x in range(Gb_edges.shape[0])]
-        # Gw_edges["PROGRESS_PERCENTAGE"] = [x / Gw_edges.shape[0] for x in range(Gw_edges.shape[0])]
 
         ss["Gb_edges"] = Gb_edges
         ss["Gb_nodes"] = Gb_nodes
@@ -493,24 +491,55 @@ if __name__ == "__main__":
     # PAGE FEATURES
 
     st.markdown("# Recompute Discomfort Scores")
+    st.markdown("Changes you have made to the weights will be reflected in the new scores.")
 
-    if st.button("Go"):
-        which = "walking"
+    col1, col2 = st.columns([1, 1])
 
-        progressbar = st.progress(0, text = f"Recomputing {which} discomfort...")
+    with col1:
+        cycling_button = st.button("Recompute Cycling Discomfort")
+    with col2:
+        walking_button = st.button("Recompute Walking Discomfort")
 
-        if which == "cycling":
+    if cycling_button or walking_button:
 
-            entries = []
-            counter = -1
+        which = "cycling" if cycling_button else "walking"
+
+        progressbar = st.progress(0, text = f"Working on {which} discomfort...")
+
+        empty_MESSAGE = st.empty()
+
+        empty_PLOT = st.empty()
+
+        # def cont():
+        #     return st.container(border=True, height = 300)
+
+        fig, ax = plt.subplots(figsize = (3, 2.5))
+        ax.set_xlim(0.015+1.21e2, 0.065+1.21e2)
+        ax.set_ylim(14.565, 14.600)
+        plt.axis(False)
+
+        if cycling_button:
+
+            discomfort_score_entries = []
+            counter = 0
             for index, s in ss["Gb_edges"].iterrows():
-                counter += 1
 
                 is_dismount = (ss["preproc_Gb"].loc[s.name]["bicycle_status"] == "dismount")
 
-                if (counter % 1000) == 0:
+                if (counter % 2000) == 0:
                     rounded_perc = int(round(counter / ss["Gb_edges"].shape[0] * 100, 0))
-                    progressbar.progress(rounded_perc, text = f"Recomputing {which} discomfort... {rounded_perc}%")
+                    progressbar.progress(rounded_perc, text = f"Working on {which} discomfort... {rounded_perc}%")
+
+                    with empty_PLOT:
+                            
+                        subset = ss["Gb_edges"].iloc[:counter]
+                        subset.plot(
+                            -1 * pd.Series(discomfort_score_entries[:counter], index = subset.index),
+                            aspect = 1,
+                            ax = ax,
+                            linewidth = 0.5,
+                        )
+                        st.pyplot(fig, use_container_width=False)
 
                 score = biking_discomfort(
                     s,
@@ -519,23 +548,45 @@ if __name__ == "__main__":
                     preproc_Gb = ss["preproc_Gb"]
                 )["score_weighted_by_main"]
             
-                entries.append(score)
+                discomfort_score_entries.append(score)
 
-            progressbar.progress(rounded_perc, text = f"Recomputing {which} discomfort... 100%")
-            
-            result = pd.Series(entries, index = ss["Gb_edges"].index)
-            ss["Gb_edges_discomfort"] = result
-            
-        elif which == "walking":
-
-            entries = []
-            counter = -1
-            for index, s in ss["Gw_edges"].iterrows():
                 counter += 1
 
-                if (counter % 1000) == 0:
-                    rounded_perc = int(round(counter / ss["Gw_edges"].shape[0] * 100, 0))
-                    progressbar.progress(rounded_perc, text = f"Recomputing {which} discomfort... {rounded_perc}%")
+            # complete the progress bar
+            progressbar.progress(100, text = f"Working on {which} discomfort... 100%")
+            with empty_PLOT:
+                subset = ss["Gb_edges"]
+                subset.plot(
+                    -1 * pd.Series(discomfort_score_entries, index = subset.index),
+                    aspect = 1, ax = ax, linewidth = 0.5,)
+                st.pyplot(fig, use_container_width=False)
+
+            # store results
+            
+            result = pd.Series(discomfort_score_entries, index = ss["Gb_edges"].index)
+            ss["Gb_edges_discomfort"] = result
+
+            ### TEST ONLY
+            # st.write(ss["Gb_edges_discomfort"].mean())
+            
+        elif walking_button:
+
+            discomfort_score_entries = []
+            counter = 0
+            for index, s in ss["Gw_edges"].iterrows():
+                
+                if (counter % 2000) == 0:
+                    rounded_perc = int(round(counter / ss["Gb_edges"].shape[0] * 100, 0))
+                    progressbar.progress(rounded_perc, text = f"Working on {which} discomfort... {rounded_perc}%")
+
+                    # empty_element.empty()
+                    with empty_PLOT:
+                        subset = ss["Gw_edges"].iloc[:counter]
+                        subset.plot(
+                            -1 * pd.Series(discomfort_score_entries[:counter], index = subset.index),
+                            aspect = 1, ax = ax, linewidth = 0.5,
+                            )
+                        st.pyplot(fig, use_container_width=False)
 
                 score = walking_discomfort(
                     s,
@@ -544,11 +595,27 @@ if __name__ == "__main__":
                     preproc_Gw = ss["preproc_Gw"]
                 )["score_weighted_by_main"]
             
-                entries.append(score)
+                discomfort_score_entries.append(score)
 
-            progressbar.progress(rounded_perc, text = f"Recomputing {which} discomfort... 100%")
-            
-            result = pd.Series(entries, index = ss["Gw_edges"].index)
+                counter += 1
+
+            # complete the progress bar
+            progressbar.progress(100, text = f"Working on {which} discomfort... 100%")
+
+            with empty_PLOT:
+                subset = ss["Gw_edges"]
+                subset.plot(
+                    -1 * pd.Series(discomfort_score_entries, index = subset.index),
+                    aspect = 1, ax = ax, linewidth = 0.5,)
+                st.pyplot(fig, use_container_width=False)
+
+            # store results
+            result = pd.Series(discomfort_score_entries, index = ss["Gw_edges"].index)
             ss["Gw_edges_discomfort"] = result
 
-            st.write(ss["Gw_edges_discomfort"].min())
+            # ### TEST ONLY
+            # st.write(ss["Gw_edges_discomfort"].mean())
+
+        # final info pop-up
+        with empty_MESSAGE:
+            st.info("Finished computations. You can inspect this map in more detail via the Map page.")

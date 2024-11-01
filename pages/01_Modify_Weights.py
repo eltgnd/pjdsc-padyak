@@ -100,7 +100,7 @@ def make_chart_for_subcomponent(subcomp_name, subcomp_group):
 
     return chart
 
-@st.cache_data() # no need to set experimental_allow_widgets=True
+@st.cache_data(experimental_allow_widgets=True) # no need to set experimental_allow_widgets=True
 def show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group):
     with st.expander(exp_title, expanded = False):
 
@@ -119,6 +119,31 @@ def show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group):
             if "extra_explanation" in d:
                 st.caption(d['extra_explanation'])
 
+    return None
+
+def generate_terms_of_formula(d, ss_weights_key):
+    to_concat = []
+
+    for subcomp_name in d['subcomponents']:
+
+        if subcomp_name in ss[ss_weights_key]:
+
+            subcomp_display_name = subcomponent_name_to_display_info[subcomp_name]["display_name"]
+
+            subcomp_weight = round(ss[ss_weights_key][subcomp_name], 2)
+
+            current_term = f"(**{round(subcomp_weight, 2)}** x {subcomp_display_name})"
+
+            prefix = "" if len(to_concat) == 0 else "\+ "
+
+            to_concat.append(prefix + current_term)
+
+            result = "\n\n".join(to_concat)
+
+    return result
+
+def update_weights_dict_from_key(sskey_weights_TEMP, component_name, data_key):
+    ss[sskey_weights_TEMP][component_name] = ss[data_key]
     return None
 
 # Main
@@ -145,37 +170,19 @@ if __name__ == "__main__":
     if "walk_maincomp_info" not in ss:
         ss["w_maincomp_info"] = walk_main_component_name_to_display_info
 
-    if "CHANGE_WEIGHTS_mode_just_changed" not in ss:
-        ss["CHANGE_WEIGHTS_mode_just_changed"] = True
-
-    def on_change_mode():
-        ss["CHANGE_WEIGHTS_mode_just_changed"] = True
-
     mode_option = st.radio(
         "Mode of active transport",
         options = ["Cycling", "Walking"],
         horizontal = True,
-        on_change = on_change_mode,
     )
 
-    if ss["CHANGE_WEIGHTS_mode_just_changed"] or ("CHANGE_WEIGHTS_mode_just_changed" not in ss):
-        if mode_option == "Cycling":
-            ss['CHANGE_WEIGHTS_maincomp_info_reference'] = ss["b_maincomp_info"]
-            ss['CHANGE_WEIGHTS_sub_weights_reference'] = ss["weights_sub_bike_CYCLE"]
-            ss['CHANGE_WEIGHTS_sub_weights_reference_DISMOUNT'] = ss["weights_sub_bike_DISMOUNT"]
-            ss['CHANGE_WEIGHTS_main_weights_reference'] = ss["weights_main_bike"]
-    
-        elif mode_option == "Walking":
-            ss['CHANGE_WEIGHTS_maincomp_info_reference'] = ss["w_maincomp_info"]
-            ss['CHANGE_WEIGHTS_sub_weights_reference'] = ss["weights_sub_walk"]
-            ss['CHANGE_WEIGHTS_main_weights_reference'] = ss["weights_main_walk"]
+    if mode_option == "Cycling":
+        maincomp_info_reference = ss["b_maincomp_info"]
+        sskey_main_weights = "weights_main_bike"
 
-    # Revert to False
-    ss["CHANGE_WEIGHTS_mode_just_changed"] = False
-
-    maincomp_info_reference = ss["CHANGE_WEIGHTS_maincomp_info_reference"]
-    main_weights_reference = ss["CHANGE_WEIGHTS_main_weights_reference"]
-    sub_weights_reference = ss["CHANGE_WEIGHTS_sub_weights_reference"]
+    elif mode_option == "Walking":
+        maincomp_info_reference = ss["w_maincomp_info"]
+        sskey_main_weights = "weights_main_walk"
 
     if (mode_option == "Walking"):
 
@@ -197,13 +204,16 @@ if __name__ == "__main__":
                         this_key = f"CHANGE_WEIGHTS_walk_SUB_{subcomp_name}"
                         result = st.number_input(
                             this_key,
-                            # value = float(ss["weights_sub_walk"][subcomp_name]),
-                            value = float(default_weights_subcomponents_walk[subcomp_name]),
+                            value = float(ss["weights_sub_walk"][subcomp_name]),
                             step = 0.1,
                             key = this_key,
-                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                            label_visibility = "collapsed", # necessary to remove the space above the input box that is left by the empty label
+                            on_change = update_weights_dict_from_key,
+                            args = ("weights_sub_walk", subcomp_name, this_key)
                         )
-                        ss["weights_sub_walk"][subcomp_name] = result
+
+                        # ### FOR VERIFICATION
+                        # st.write(ss["weights_sub_walk"][subcomp_name])
 
                     with col2:
                         show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="WALK")
@@ -234,9 +244,13 @@ if __name__ == "__main__":
                             value = float(default_weights_subcomponents_bike_CYCLE[subcomp_name]),
                             step = 0.1,
                             key = this_key,
-                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                            label_visibility = "collapsed", # necessary to remove the space above the input box that is left by the empty label
+                            on_change = update_weights_dict_from_key,
+                            args = ("weights_sub_bike_CYCLE", subcomp_name, this_key)
                         )
-                        ss["weights_sub_bike_CYCLE"][subcomp_name] = result
+
+                        # ### FOR VERIFICATION
+                        # st.write(ss["weights_sub_bike_CYCLE"][subcomp_name])
 
                     with col2:
                         show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="CYCLE")
@@ -263,13 +277,17 @@ if __name__ == "__main__":
                             value = float(default_weights_subcomponents_bike_DISMOUNT[subcomp_name]),
                             step = 0.1,
                             key = this_key,
-                            label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                            label_visibility = "collapsed", # necessary to remove the space above the input box that is left by the empty label
+                            on_change = update_weights_dict_from_key,
+                            args = ("weights_sub_bike_DISMOUNT", subcomp_name, this_key)
                         )
-                        ss["weights_sub_bike_DISMOUNT"][subcomp_name] = result
+
+                        # ### FOR VERIFICATION
+                        # st.write(ss["weights_sub_bike_DISMOUNT"][subcomp_name])
 
                     with col2:
                         show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group="DISMOUNT")
-                        
+
 
     # The ff code applies to both Walking and Cycling        
     with tab_main:
@@ -279,18 +297,20 @@ if __name__ == "__main__":
             col1, col2 = st.columns([1, 3])
 
             with col1:
+
                 this_key = f"CHANGE_WEIGHTS_{mode_option}_MAIN_{maincomp_name}"
-                st.number_input(
+                result = st.number_input(
                     this_key,
-                    value = float(
-                        default_weights_main_components_bike[maincomp_name]
-                        if mode_option == "Cycling"
-                        else default_weights_main_components_walk[maincomp_name]
-                    ),
-                    step = 0.01,
+                    value = float(ss[sskey_main_weights][maincomp_name]),
+                    step = 0.1,
                     key = this_key,
-                    label_visibility = "collapsed" # necessary to remove the space above the input box that is left by the empty label
+                    label_visibility = "collapsed", # necessary to remove the space above the input box that is left by the empty label
+                    on_change = update_weights_dict_from_key,
+                    args = (sskey_main_weights, maincomp_name, this_key),
                 )
+
+                # # FOR VERIFICATION
+                # st.write(ss[sskey_main_weights][maincomp_name])
 
             with col2:
 
@@ -301,27 +321,6 @@ if __name__ == "__main__":
                     if 'subcomponents' in d:
 
                         with st.container(border = True):
-
-                            def generate_terms_of_formula(d, ss_weights_key):
-                                to_concat = []
-
-                                for subcomp_name in d['subcomponents']:
-
-                                    if subcomp_name in ss[ss_weights_key]:
-
-                                        subcomp_display_name = subcomponent_name_to_display_info[subcomp_name]["display_name"]
-
-                                        subcomp_weight = round(ss[ss_weights_key][subcomp_name], 2)
-
-                                        current_term = f"(**{round(subcomp_weight, 2)}** x {subcomp_display_name})"
-
-                                        prefix = "" if len(to_concat) == 0 else "\+ "
-
-                                        to_concat.append(prefix + current_term)
-
-                                        result = "\n\n".join(to_concat)
-
-                                return result
 
                             if mode_option == "Walking":
 
@@ -350,6 +349,3 @@ if __name__ == "__main__":
                                 st.divider()
 
                             st.caption("Based on currently set weights of subcomponents. You can change these in the Subcomponents tab.")
-
-    # # TEST ONLY
-    # st.write(ss["weights_sub_bike_CYCLE"]["FROM_IMAGES_has_bicycle"])
