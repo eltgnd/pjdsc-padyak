@@ -429,15 +429,15 @@ weights: dict. Keys should be same as column names of dataframe.
 
 @st.cache_data(ttl = None, max_entries = 1)
 def load_preproc():
-    preproc_Gb = pd.read_csv("migs_pages_data/preproc_Gb.csv").set_index(["u", "v", "key"], drop = True)
-    preproc_Gw = pd.read_csv("migs_pages_data/preproc_Gw.csv").set_index(["u", "v", "key"], drop = True)
+    preproc_Gb = pd.read_csv("discomfort_and_curve_data/preproc_Gb.csv").set_index(["u", "v", "key"], drop = True)
+    preproc_Gw = pd.read_csv("discomfort_and_curve_data/preproc_Gw.csv").set_index(["u", "v", "key"], drop = True)
 
     return preproc_Gb, preproc_Gw
 
 
 @st.cache_data(ttl = None, max_entries = 1)
 def load_nodes_and_edges():
-    folder = "migs_pages_data/"
+    folder = "discomfort_and_curve_data/"
 
     Gb_edges = gpd.read_feather(folder + "Gb_edges.feather")
     Gb_nodes = gpd.read_feather(folder + "Gb_nodes.feather")

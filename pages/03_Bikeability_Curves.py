@@ -25,14 +25,14 @@ st.set_page_config(page_title=page_title, page_icon=page_icon, layout="centered"
 
 @st.cache_data(ttl = None, max_entries = 1)
 def load_curve_data():
-    brgy_bike_results = pd.read_csv("migs_pages_data/brgy_curve_analysis/brgy_bike_results.csv")
-    brgy_walk_results = pd.read_csv("migs_pages_data/brgy_curve_analysis/brgy_walk_results.csv")
+    brgy_bike_results = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_bike_results.csv")
+    brgy_walk_results = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_walk_results.csv")
 
-    brgy_bike_metrics = pd.read_csv("migs_pages_data/brgy_curve_analysis/brgy_bike_metrics.csv").set_index("adm4_pcode", drop = False).sort_values("adm4_en", ascending=True)
-    brgy_walk_metrics = pd.read_csv("migs_pages_data/brgy_curve_analysis/brgy_walk_metrics.csv").set_index("adm4_pcode", drop = False).sort_values("adm4_en", ascending=True)
+    brgy_bike_metrics = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_bike_metrics.csv").set_index("adm4_pcode", drop = False).sort_values("adm4_en", ascending=True)
+    brgy_walk_metrics = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_walk_metrics.csv").set_index("adm4_pcode", drop = False).sort_values("adm4_en", ascending=True)
 
-    city_bike_results = pd.read_csv("migs_pages_data/city_curve_analysis/city_bike_results.csv")
-    city_walk_results = pd.read_csv("migs_pages_data/city_curve_analysis/city_walk_results.csv")
+    city_bike_results = pd.read_csv("discomfort_and_curve_data/city_curve_analysis/city_bike_results.csv")
+    city_walk_results = pd.read_csv("discomfort_and_curve_data/city_curve_analysis/city_walk_results.csv")
 
     city_bike_metrics = city_bike_results.drop("beta", axis = 1).mean(axis = 0)
     city_walk_metrics = city_walk_results.drop("beta", axis = 1).mean(axis = 0)
