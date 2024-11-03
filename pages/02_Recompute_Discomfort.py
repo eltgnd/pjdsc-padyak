@@ -7,7 +7,7 @@ import seaborn as sns
 import altair as alt
 import geopandas as gpd
 
-from migs_custom_functions import load_discomfort_score_component_info
+from discomfort_score_metadata import load_discomfort_score_component_info
 
 #--------------------------------------------
 
