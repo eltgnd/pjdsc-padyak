@@ -3,14 +3,14 @@ import streamlit as st
 @st.cache_data(ttl = None, max_entries = 1)
 def load_discomfort_score_component_info():
     default_weights_subcomponents_bike_CYCLE = {
-        "bicycle": 1,
-        "CYCLEWAY_CLASS": 1,
+        "bicycle": 3,
+        "CYCLEWAY_CLASS": 1.55,
         "CYCLEWAY_LANE_TYPE": 1,
         "foot": 1,
-        "highway": 1,
+        "highway": 1.42,
         "ALLEY": 1,
         "width": 1,
-        "lit": 1,
+        "lit": 2.72,
         "maxspeed": 1,
         "segregated": 1,
         "PARKING_SUBTAGS": 1,
@@ -20,20 +20,20 @@ def load_discomfort_score_component_info():
 
         # FROM IMAGE DATA
         "FROM_IMAGES_cycling_lane_coverage": 1,
-        "FROM_IMAGES_greenery_ratio": 1,
+        "FROM_IMAGES_greenery_ratio": 1.68,
         "FROM_IMAGES_has_bicycle": 1,
         "FROM_IMAGES_road_condition": 1,
     }
 
     default_weights_subcomponents_bike_DISMOUNT = {
-        "foot": 1,
-        "highway": 1,
-        "ALLEY": 1,
+        "foot": 1.41,
+        "highway": 2.48,
+        "ALLEY": 1.05,
         "width": 1,
-        "lit": 1,
-        "maxspeed": 1,
+        "lit": 3,
+        "maxspeed": 1.58,
         "segregated": 1,
-        "sidewalk": 1,
+        "sidewalk": 2.07,
         "PARKING_SUBTAGS": 1,
         "TAG_crossing": 1,
         "EDSA_accident_component": 1,
@@ -44,7 +44,7 @@ def load_discomfort_score_component_info():
     }
 
     default_weights_main_components_bike = {
-        "DISMOUNT": 1,
+        "DISMOUNT": 0.4,
         "convenience": 1,
         "attractiveness": 1,
         "traffic_safety": 1,
@@ -56,14 +56,14 @@ def load_discomfort_score_component_info():
     }
 
     default_weights_subcomponents_walk = {
-        "foot": 1,
-        "highway": 1,
-        "ALLEY": 1,
+        "foot": 1.41,
+        "highway": 2.48,
+        "ALLEY": 1.05,
         "width": 1,
-        "lit": 1,
-        "maxspeed": 1,
+        "lit": 3,
+        "maxspeed": 1.58,
         "segregated": 1,
-        "sidewalk": 1,
+        "sidewalk": 2.07,
         "PARKING_SUBTAGS": 1,
         "TAG_crossing": 1,
         "EDSA_accident_component": 1,
@@ -72,7 +72,7 @@ def load_discomfort_score_component_info():
         "FROM_IMAGES_greenery_ratio": 1,
         "FROM_IMAGES_road_condition": 1,
         "FROM_IMAGES_has_traffic_light": 1,
-        "FROM_IMAGES_has_crosswalk": 1,
+        "FROM_IMAGES_has_crosswalk": 2.51,
         "FROM_IMAGES_obstruction_density": 1,
     }
 
