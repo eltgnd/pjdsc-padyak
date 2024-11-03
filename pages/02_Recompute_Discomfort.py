@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import seaborn as sns
 import altair as alt
 import geopandas as gpd
@@ -446,6 +447,17 @@ def load_nodes_and_edges():
 
     return Gb_edges, Gb_nodes, Gw_edges, Gw_nodes
 
+def get_norm(discomfort_score_entries):
+    negated = [-x for x in discomfort_score_entries]
+    vmin = min(negated)
+    vmax = max(negated)
+
+    norm = colors.TwoSlopeNorm(vmin=vmin,
+                            vcenter=np.median(negated),
+                            vmax=vmax)
+    
+    return vmin, vmax, norm
+
 
 #----------------------------------------------
 
@@ -510,13 +522,17 @@ if __name__ == "__main__":
 
         empty_PLOT = st.empty()
 
-        # def cont():
-        #     return st.container(border=True, height = 300)
-
         fig, ax = plt.subplots(figsize = (3, 2.5))
         ax.set_xlim(0.015+1.21e2, 0.065+1.21e2)
         ax.set_ylim(14.565, 14.600)
         plt.axis(False)
+
+        chosen_cmap = sns.diverging_palette(
+            10, 145, center = "light",
+            s = 100, # maximize saturation of end-colors, important for visibility
+            sep = 1, # make the intermediate region very small so that small differences can be seen color-wise
+            as_cmap = True
+        )
 
         if cycling_button:
 
@@ -526,9 +542,11 @@ if __name__ == "__main__":
 
                 is_dismount = (ss["preproc_Gb"].loc[s.name]["bicycle_status"] == "dismount")
 
-                if (counter % 2000) == 0:
+                if (counter % 2000) == 2:
                     rounded_perc = int(round(counter / ss["Gb_edges"].shape[0] * 100, 0))
                     progressbar.progress(rounded_perc, text = f"Working on {which} discomfort... {rounded_perc}%")
+
+                    vmin, vmax, norm = get_norm(discomfort_score_entries)
 
                     with empty_PLOT:
                             
@@ -538,6 +556,10 @@ if __name__ == "__main__":
                             aspect = 1,
                             ax = ax,
                             linewidth = 0.5,
+                            cmap = chosen_cmap,
+                            norm = norm,
+                            vmin = vmin,
+                            vmax = vmax
                         )
                         st.pyplot(fig, use_container_width=False)
 
@@ -555,10 +577,12 @@ if __name__ == "__main__":
             # complete the progress bar
             progressbar.progress(100, text = f"Working on {which} discomfort... 100%")
             with empty_PLOT:
+                vmin, vmax, norm = get_norm(discomfort_score_entries)
+
                 subset = ss["Gb_edges"]
                 subset.plot(
                     -1 * pd.Series(discomfort_score_entries, index = subset.index),
-                    aspect = 1, ax = ax, linewidth = 0.5,)
+                    aspect = 1, ax = ax, linewidth = 0.5, cmap = chosen_cmap, norm = norm, vmin = vmin, vmax = vmax)
                 st.pyplot(fig, use_container_width=False)
 
             # store results
@@ -575,16 +599,18 @@ if __name__ == "__main__":
             counter = 0
             for index, s in ss["Gw_edges"].iterrows():
                 
-                if (counter % 2000) == 0:
+                if (counter % 2000) == 2:
                     rounded_perc = int(round(counter / ss["Gb_edges"].shape[0] * 100, 0))
                     progressbar.progress(rounded_perc, text = f"Working on {which} discomfort... {rounded_perc}%")
+
+                    vmin, vmax, norm = get_norm(discomfort_score_entries)
 
                     # empty_element.empty()
                     with empty_PLOT:
                         subset = ss["Gw_edges"].iloc[:counter]
                         subset.plot(
                             -1 * pd.Series(discomfort_score_entries[:counter], index = subset.index),
-                            aspect = 1, ax = ax, linewidth = 0.5,
+                            aspect = 1, ax = ax, linewidth = 0.5, cmap = chosen_cmap, norm = norm, vmin = vmin, vmax = vmax
                             )
                         st.pyplot(fig, use_container_width=False)
 
@@ -603,10 +629,13 @@ if __name__ == "__main__":
             progressbar.progress(100, text = f"Working on {which} discomfort... 100%")
 
             with empty_PLOT:
+
+                vmin, vmax, norm = get_norm(discomfort_score_entries)
+
                 subset = ss["Gw_edges"]
                 subset.plot(
                     -1 * pd.Series(discomfort_score_entries, index = subset.index),
-                    aspect = 1, ax = ax, linewidth = 0.5,)
+                    aspect = 1, ax = ax, linewidth = 0.5, cmap = chosen_cmap, norm = norm, vmin = vmin, vmax = vmax)
                 st.pyplot(fig, use_container_width=False)
 
             # store results
