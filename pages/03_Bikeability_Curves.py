@@ -28,8 +28,12 @@ def load_curve_data():
     brgy_bike_results = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_bike_results.csv")
     brgy_walk_results = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_walk_results.csv")
 
-    brgy_bike_metrics = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_bike_metrics.csv").set_index("adm4_pcode", drop = False).sort_values("adm4_en", ascending=True)
+    brgy_bike_metrics = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_bike_metrics.csv").set_index("adm4_pcode", drop = False).sort_values("adm4_en", ascending=True) 
     brgy_walk_metrics = pd.read_csv("discomfort_and_curve_data/brgy_curve_analysis/brgy_walk_metrics.csv").set_index("adm4_pcode", drop = False).sort_values("adm4_en", ascending=True)
+
+    # if TOR could not be computed, replace with 0
+    brgy_bike_metrics["average_tradeoff_rate"] = brgy_bike_metrics["average_tradeoff_rate"].fillna(0)
+    brgy_walk_metrics["average_tradeoff_rate"] = brgy_walk_metrics["average_tradeoff_rate"].fillna(0)
 
     city_bike_results = pd.read_csv("discomfort_and_curve_data/city_curve_analysis/city_bike_results.csv")
     city_walk_results = pd.read_csv("discomfort_and_curve_data/city_curve_analysis/city_walk_results.csv")
@@ -57,6 +61,10 @@ def tradeoff_rate(r1, r2):
 def tradeoff_rates_from_results(results):
     new_rows = []
     results_df = results.sort_values("beta", ascending = True).reset_index(drop = True)
+
+    results_df["relative_discomfort_ROUNDED"] = results_df["relative_discomfort"].round(2)
+    results_df["relative_distance_ROUNDED"] = results_df["relative_distance"].round(2)
+
     max_index = results_df.shape[0] - 1
 
     new_rows.append({
@@ -107,11 +115,11 @@ def display_single_area_analysis(city_metrics, city_results, place_name):
     city_results = city_results.merge(tor_df, left_on = "beta", right_on="higher_beta", how = "left")
 
     # if both relative discomfort and relative distance had a very small change, drop duplicates.
-    city_results["relative_discomfort_ROUNDED"] = city_results["relative_discomfort"].round(2)
-    city_results["relative_distance_ROUNDED"] = city_results["relative_distance"].round(2)
+    city_results["relative_discomfort_ROUNDED"] = city_results["relative_discomfort"].round(3)
+    city_results["relative_distance_ROUNDED"] = city_results["relative_distance"].round(3)
     city_results_length1 = city_results.shape[0]
 
-    city_results = city_results.drop_duplicates(["relative_discomfort_ROUNDED", "relative_distance_ROUNDED"], keep = "first")
+    city_results = city_results.sort_values("beta", ascending = True).drop_duplicates(["relative_discomfort_ROUNDED", "relative_distance_ROUNDED"], keep = "first")
     city_results_length2 = city_results.shape[0]
 
     some_betas_were_skipped = city_results_length2 < city_results_length1
@@ -138,7 +146,7 @@ def display_single_area_analysis(city_metrics, city_results, place_name):
             alt.Tooltip("relative_distance:Q", title = "Relative Distance (Circuity)"),
             alt.Tooltip("relative_discomfort:Q", title = "Relative Discomfort"),
             alt.Tooltip("beta:N", title = "Beta (Discomfort Sensitivity)"),
-            alt.Tooltip("tradeoff_rate:N", title = "Tradeoff Rate from this Beta"),
+            alt.Tooltip("tradeoff_rate:N", title = "MTOR from previous Beta"),
         ]
     )
 
@@ -150,6 +158,7 @@ def display_single_area_analysis(city_metrics, city_results, place_name):
         align="left",
         baseline="middle",
         lineBreak=r"\n",
+        tooltip=False
     ).encode(
         text = alt.Text("text_display:N"),
     )
@@ -157,7 +166,13 @@ def display_single_area_analysis(city_metrics, city_results, place_name):
     arrow = alt.Chart(city_results.iloc[1:]).mark_point(shape="arrow", filled=True, opacity = 1, color = "white", size = 300).encode(
         x = alt.X("relative_distance:Q", title = "Relative Distance (Circuity)", scale = alt.Scale(domain = domx)),
         y = alt.Y("relative_discomfort:Q", title = "Relative Discomfort", scale = alt.Scale(domain = domy)),
-        angle = alt.AngleValue(140)
+        angle = alt.AngleValue(135),
+        tooltip = [
+            alt.Tooltip("relative_distance:Q", title = "Relative Distance (Circuity)"),
+            alt.Tooltip("relative_discomfort:Q", title = "Relative Discomfort"),
+            alt.Tooltip("beta:N", title = "Beta (Discomfort Sensitivity)"),
+            alt.Tooltip("tradeoff_rate:N", title = "MTOR from previous Beta"),
+        ]
     )
     
     chart = (base + text + chart2 + arrow).configure_point(
@@ -175,81 +190,85 @@ def display_single_area_analysis(city_metrics, city_results, place_name):
     if some_betas_were_skipped:
         st.caption(r"The full set of Beta values tested is {0, 0.5, 1, 1.5, 2, 2.5, 3}. If any of these values are not present in the chart above, it is because there was no change in relative discomfort or relative distance was measured, compared to lower values of Beta.")
 
-    st.markdown("### Interpretation")
-    st.markdown("Higher values of Beta indicate higher sensitivity to discomfort, i.e., cyclists/pedestrians who are willing to take longer detours to improve comfort.\n\nThe lowest value, 'Beta=0.0', is the case where a person is not sensitive to discomfort; they simply try to take the shortest possible path.")
+    if city_results.shape[0] <= 1:
 
-    beta_pair_option = st.radio("Choose a Beta interval", options = city_results.index[1:], format_func = lambda x: tor_df.at[x, "beta_pair"], horizontal=True)
+        st.info("Since the relative distance and discomfort is the same for every Beta, in the case of this barangay, no Modified Trade-off Rate (MTOR) can be calculated.")
 
-    row = city_results.loc[beta_pair_option]
+    else:
 
-    # with st.container(border=True):
+        st.markdown("### Interpretation")
+        st.markdown("Higher values of Beta indicate higher sensitivity to discomfort, i.e., cyclists/pedestrians who are willing to take longer detours to improve comfort.\n\nThe lowest value, 'Beta=0.0', is the case where a person is not sensitive to discomfort; they simply try to take the shortest possible path.")
 
-    overall_colspec = [1.4, 0.8, 0.2, 0.8]
-    colspec = overall_colspec[1:]
-    maincolspec = [overall_colspec[0], sum(colspec)]
+        beta_pair_option = st.radio("Choose a Beta interval", options = city_results.index[1:], format_func = lambda x: tor_df.at[x, "beta_pair"], horizontal=True)
 
-    maincol1, maincol2 = st.columns(maincolspec)
+        row = city_results.loc[beta_pair_option]
 
-    with maincol1:
-        with st.container(border = True):
-            st.markdown(f"#### At Beta={row['beta']}, MTOR={row['tradeoff_rate_rounded']}.")
+        overall_colspec = [1.2, 0.8, 0.2, 0.8]
+        colspec = overall_colspec[1:]
+        maincolspec = [overall_colspec[0], sum(colspec)]
 
-            interpretation = f'- To reduce discomfort by **{round(row["discomfort_change_percent"], 1)}%**, you need a detour that is **{round(row["distance_change_percent"], 1)}%** longer, vs. route taken with lower sensitivity to discomfort (Beta={row["lower_beta"]}).\n- Discomfort decreases **{row["tradeoff_rate_rounded"]} times** as much as the extra distance, percentagewise.'
+        maincol1, maincol2 = st.columns(maincolspec)
 
-            st.markdown(interpretation)
+        with maincol1:
+            with st.container(border = True):
+                st.markdown(f"#### At Beta={row['beta']}, MTOR={row['tradeoff_rate_rounded']}.")
 
-    with maincol2:
+                interpretation = f'- To reduce discomfort by **{round(row["discomfort_change_percent"], 2)}%**, you need a detour that is **{round(row["distance_change_percent"], 2)}%** longer, vs. the route taken with lower sensitivity to discomfort (Beta={row["lower_beta"]}).\n- Discomfort decreases **{row["tradeoff_rate_rounded"]} times** as much as the extra distance, percentagewise.'
 
-        with st.container(border = True):
+                st.markdown(interpretation)
 
-            with st.container():
+        with maincol2:
 
-                col1, col2, col3 = st.columns(colspec)
+            with st.container(border = True):
 
-                with col1:
-                    st.metric(
-                        f"Relative Discomfort",
-                        round(row['relative_discomfort'], 3),
-                        delta = f"-{round(row['discomfort_change_exact'], 3)} (by {round(row['discomfort_change_percent'], 1)}%)",
-                        delta_color = "inverse"
-                    )
+                with st.container():
 
-                with col2:
-                    st.markdown("# ←")
+                    col1, col2, col3 = st.columns(colspec)
 
-                with col3:
-
-                    st.metric(
-                        f"versus Beta={row['lower_beta']}:",
-                        round(row['relative_discomfort_PREVIOUS'], 3),
-                        delta = "",
-                        delta_color = "off"
-                    )
-
-            with st.container():
-
-                col1, col2, col3 = st.columns(colspec)
-
-                with col1:
-
-                    st.metric(
-                            f"Relative Distance",
-                            round(row['relative_distance'], 3),
-                            delta = f"{round(row['distance_change_exact'], 3)} (by {round(row['distance_change_percent'], 1)}%)",
+                    with col1:
+                        st.metric(
+                            f"Discomfort, Beta={row['higher_beta']}",
+                            round(row['relative_discomfort'], 3),
+                            delta = f"-{round(row['discomfort_change_exact'], 4)} (by {round(row['discomfort_change_percent'], 2)}%)",
                             delta_color = "inverse"
                         )
 
-                with col2:
-                    st.markdown("# ←")
+                    with col2:
+                        st.markdown("# ←")
 
-                with col3:
+                    with col3:
 
-                    st.metric(
-                        f"versus Beta={row['lower_beta']}:",
-                        round(row['relative_distance_PREVIOUS'], 3),
-                        delta = "",
-                        delta_color = "off"
-                    )
+                        st.metric(
+                            f"versus Beta={row['lower_beta']}:",
+                            round(row['relative_discomfort_PREVIOUS'], 3),
+                            delta = "",
+                            delta_color = "off"
+                        )
+
+                with st.container():
+
+                    col1, col2, col3 = st.columns(colspec)
+
+                    with col1:
+
+                        st.metric(
+                                f"Distance, Beta={row['higher_beta']}",
+                                round(row['relative_distance'], 3),
+                                delta = f"{round(row['distance_change_exact'], 4)} (by {round(row['distance_change_percent'], 2)}%)",
+                                delta_color = "inverse"
+                            )
+
+                    with col2:
+                        st.markdown("# ←")
+
+                    with col3:
+
+                        st.metric(
+                            f"versus Beta={row['lower_beta']}:",
+                            round(row['relative_distance_PREVIOUS'], 3),
+                            delta = "",
+                            delta_color = "off"
+                        )
     
     display_explanation_expander()
 
@@ -433,10 +452,16 @@ if __name__ == "__main__":
 
                 df = brgy_results_filtered
 
+                # if both relative discomfort and relative distance had a very small change, drop duplicates.
+                df["relative_discomfort_ROUNDED"] = df["relative_discomfort"].round(3)
+                df["relative_distance_ROUNDED"] = df["relative_distance"].round(3)
+
+                df = df.sort_values("beta", ascending = True).drop_duplicates(["adm4_pcode", "relative_discomfort_ROUNDED", "relative_distance_ROUNDED"], keep = "first")
+
                 domx = [df["relative_distance"].min() - 0.1, df["relative_distance"].max() + 0.05]
                 domy = [df["relative_discomfort"].min() - 0.01, df["relative_discomfort"].max() + 0.01]
 
-                color_scale = alt.Scale(scheme = "dark2")
+                color_scale = alt.Scale(scheme = "category20")
 
                 base = alt.Chart(df).mark_line(
                     point = False
