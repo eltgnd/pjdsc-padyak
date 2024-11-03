@@ -435,7 +435,6 @@ def load_preproc():
 
     return preproc_Gb, preproc_Gw
 
-
 @st.cache_data(ttl = None, max_entries = 1)
 def load_nodes_and_edges():
     folder = "discomfort_and_curve_data/"
