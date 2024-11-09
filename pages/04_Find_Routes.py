@@ -127,24 +127,30 @@ if __name__ == "__main__":
         edges = Gw_edges
         nodes = Gw_nodes
 
-    # Filter
+    # Filter to selectable nodes (nodes that had been sampled from the complete set of nodes)
     nodes_selectable = nodes.loc[list_nodes_sampled]
 
-    # widgets
+    # Choose origin and destination
 
-    node_o = st.selectbox(
-        "Origin",
-        options = nodes_selectable.index,
-        index = 0,
-        format_func = lambda x: f"Node {x}"
-    )
+    col1, col2 = st.columns([1, 1])
 
-    node_d = st.selectbox(
-        "Destination",
-        options = nodes_selectable.index,
-        index = 10,
-        format_func = lambda x: f"Node {x}"
-    )
+    with col1:
+
+        node_o = st.selectbox(
+            "Origin",
+            options = nodes_selectable.index,
+            index = 0,
+            format_func = lambda x: f"Node {x}"
+        )
+
+    with col2:
+
+        node_d = st.selectbox(
+            "Destination",
+            options = nodes_selectable.index,
+            index = 10,
+            format_func = lambda x: f"Node {x}"
+        )
 
     if node_o == node_d:
         st.warning("Choose two different nodes.")
@@ -152,11 +158,15 @@ if __name__ == "__main__":
 
     # Determine path based on beta
 
-    beta = st.select_slider(
-        "Beta (Sensitivity to Discomfort)",
-        options = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
-        value = 0.0
-    )
+    cols = st.columns([1, 3, 1])
+
+    with cols[1]:
+
+        beta = st.select_slider(
+            "Beta (Sensitivity to Discomfort)",
+            options = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+            value = 0.0
+        )
 
     path_nodes = routes_dict[beta][f"{node_o}, {node_d}"]
     pairs = set([(path_nodes[i], path_nodes[i+1]) for i in range(0, len(path_nodes) - 1)])
@@ -202,4 +212,6 @@ if __name__ == "__main__":
     #     markersize = 100,
     # )
 
-    st.pyplot(fig, use_container_width=True, clear_figure=False)
+    with st.container(border = True):
+
+        st.pyplot(fig, use_container_width=True, clear_figure=False)
