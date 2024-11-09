@@ -523,7 +523,7 @@ if __name__ == "__main__":
 
         fig, ax = plt.subplots(figsize = (3, 2.5))
         ax.set_xlim(0.015+1.21e2, 0.065+1.21e2)
-        ax.set_ylim(14.565, 14.600)
+        ax.set_ylim(14.565, 14.602)
         plt.axis(False)
 
         chosen_cmap = sns.diverging_palette(
