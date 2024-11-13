@@ -7,6 +7,9 @@ import seaborn as sns
 import altair as alt
 import geopandas as gpd
 import pickle
+import leafmap.foliumap as leafmap
+import folium
+from streamlit_folium import st_folium
 
 
 #--------------------------------------------
@@ -59,19 +62,20 @@ def load_routes_data():
 def load_nodes_and_edges():
     folder = "discomfort_and_curve_data/"
 
-    Gb_edges = gpd.read_feather(folder + "Gb_edges.feather")[["geometry"]].copy(deep = True)
-    Gb_nodes = gpd.read_feather(folder + "Gb_nodes.feather")[["x", "y", "geometry"]].copy(deep = True).sort_values(["y", "x"], ascending = True)
-    Gw_edges = gpd.read_feather(folder + "Gw_edges.feather")[["geometry"]].copy(deep = True)
-    Gw_nodes = gpd.read_feather(folder + "Gw_nodes.feather")[["x", "y", "geometry"]].copy(deep = True).sort_values(["y", "x"], ascending = True)
+    Gb_edges = gpd.read_feather(folder + "Gb_edges.feather")[["geometry"]].copy(deep = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
+    Gb_nodes = gpd.read_feather(folder + "Gb_nodes.feather")[["x", "y", "geometry"]].copy(deep = True).sort_values(["y", "x"], ascending = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
+    Gw_edges = gpd.read_feather(folder + "Gw_edges.feather")[["geometry"]].copy(deep = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
+    Gw_nodes = gpd.read_feather(folder + "Gw_nodes.feather")[["x", "y", "geometry"]].copy(deep = True).sort_values(["y", "x"], ascending = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
 
     return Gb_nodes, Gw_nodes, Gb_edges, Gw_edges
 
 @st.cache_data(ttl = None, max_entries = 10)
 def load_brgy_geo():
     folder = "discomfort_and_curve_data/"
-    brgy_geo_for_city = gpd.read_feather(folder + "brgy_geo_for_city.feather").fillna("")
+    brgy_geo_for_city = gpd.read_feather(folder + "brgy_geo_for_city.feather").fillna("").select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
+    city_geo = gpd.GeoDataFrame({"geometry": [brgy_geo_for_city.union_all()]})
 
-    return brgy_geo_for_city
+    return brgy_geo_for_city, city_geo
 
 # Main
 
@@ -95,8 +99,10 @@ if __name__ == "__main__":
         ss["Gw_edges"] = Gw_edges
         ss["Gw_nodes"] = Gw_nodes
 
-    if "brgy_geo_for_city" not in ss:
-        ss["brgy_geo_for_city"] = load_brgy_geo()
+    if any([(key not in ss) for key in ["brgy_geo_for_city", "city_geo"]]):
+        a, b = load_brgy_geo()
+        ss["brgy_geo_for_city"] = a
+        ss["city_geo"] = b
 
     # DATA
     b_list_nodes_sampled, w_list_nodes_sampled, bike_routes_dict, walk_routes_dict = ss["b_list_nodes_sampled"], ss["w_list_nodes_sampled"], ss["bike_routes_dict"], ss["walk_routes_dict"]
@@ -105,6 +111,7 @@ if __name__ == "__main__":
     Gb_nodes, Gw_nodes = ss["Gb_nodes"], ss["Gw_nodes"]
 
     brgy_geo_for_city = ss["brgy_geo_for_city"]
+    city_geo = ss["city_geo"]
 
 
     # START
@@ -112,7 +119,8 @@ if __name__ == "__main__":
 
     mode_option = st.radio(
         "Mode of Active Transport",
-        options = ["Cycling", "Walking"]
+        options = ["Cycling", "Walking"],
+        horizontal=True
     )
 
     if mode_option == "Cycling":
@@ -130,88 +138,395 @@ if __name__ == "__main__":
     # Filter to selectable nodes (nodes that had been sampled from the complete set of nodes)
     nodes_selectable = nodes.loc[list_nodes_sampled]
 
-    # Choose origin and destination
+    # Choose origin and destination via node ID
 
-    col1, col2 = st.columns([1, 1])
+    disable_routes_map = False
 
-    with col1:
+    method_options = ["Node ID (input identifier of a location)", "Map (click to select points)"]
 
-        node_o = st.selectbox(
-            "Origin",
-            options = nodes_selectable.index,
-            index = 0,
-            format_func = lambda x: f"Node {x}"
-        )
+    method_of_node_selection = st.radio(
+        "Select origin and destination by:",
+        options = (0, 1),
+        format_func = lambda x: method_options[x]
+    )
 
-    with col2:
+    if method_of_node_selection == 0:
 
-        node_d = st.selectbox(
-            "Destination",
-            options = nodes_selectable.index,
-            index = 10,
-            format_func = lambda x: f"Node {x}"
-        )
+        col1, col2 = st.columns([1, 1])
 
-    if node_o == node_d:
-        st.warning("Choose two different nodes.")
-        st.stop()
+        with col1:
+
+            node_o = st.selectbox(
+                "Origin",
+                options = nodes_selectable.index,
+                index = 0,
+                format_func = lambda x: f"Node {x}"
+            )
+
+        with col2:
+
+            node_d = st.selectbox(
+                "Destination",
+                options = nodes_selectable.index,
+                index = 10,
+                format_func = lambda x: f"Node {x}"
+            )
+
+        if node_o == node_d:
+            st.warning("Choose two different points as origin and destination.")
+            disable_routes_map = True
+
+    elif method_of_node_selection == 1:
+    
+        # Map for selecting nodes
+
+        @st.fragment
+        def select_node_ORIGIN():
+
+            key_prefix = "SELECT_ORIGIN"
+
+            pt_previous_key = f"{key_prefix}_pt_previous"
+            nearest_node_key = f"{key_prefix}_nearest_node"
+
+            if pt_previous_key not in ss:
+                ss[pt_previous_key] = (None,None)
+            if nearest_node_key not in ss:
+                ss[nearest_node_key] = None
+
+            mapcenter = (14.581912, 121.037947)
+
+            m1 = leafmap.Map(center = mapcenter)
+
+            m1.add_gdf(
+                city_geo,
+                layer_name = "Mandaluyong",
+                style_function = lambda x: {
+                    "color": "black",
+                    "opacity": 0.5,
+                    "fillOpacity": 0.0,
+                    "fillColor": "none",
+                },
+                control = False # this disables toggle
+            )
+
+            if ss[nearest_node_key] is not None:
+
+                m1.add_marker(
+                    location = tuple(
+                        nodes_selectable.loc[
+                            ss[nearest_node_key]["Node ID"],
+                            ["y", "x"]
+                        ]
+                    ),
+                    tooltip = "Origin",
+                    icon = folium.Icon(
+                        prefix = "fa",
+                        icon = "circle-play",
+                        color = "green"
+                    )
+                )
+            
+            m1.fit_bounds(
+                [[14.565835, 121.014223],
+                [14.604602, 121.064785]],
+            )
+
+            col1, col2 = st.columns([3, 1.5])
+
+            with col1:
+                map_output = m1.to_streamlit(height = 300, bidirectional=True) # leafmap.foliumap has builtin support for st_folium, by setting bidirectional=True
+
+            pt = map_output["last_clicked"]
+
+            if (pt is not None):
+
+                pt_tuple = (pt["lng"], pt["lat"])
+
+                if (pt_tuple != ss[pt_previous_key]):
+
+                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
+                    point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
+
+                    nearest_node = point_df.sjoin_nearest(nodes_selectable, how = "left")[["osmid", "x_left", "y_left", "geometry"]].rename({"osmid": "Node ID", "x_left": "Longitude", "y_left": "Latitude"}, axis = 1).iloc[0]
+
+                    ss[nearest_node_key] = nearest_node
+                    ss[pt_previous_key] = (pt["lng"], pt["lat"])
+
+                    st.rerun(scope = "fragment")
+
+            with col2:
+                with st.container(border = True):
+                    st.markdown("**Chosen Origin:**")
+                    if ss['SELECT_ORIGIN_nearest_node'] is not None:
+                        st.markdown(f"Node ID: {ss['SELECT_ORIGIN_nearest_node']['Node ID']}")
+                        st.markdown(f"Latitude: {ss['SELECT_ORIGIN_pt_previous'][1]}")
+                        st.markdown(f"Longitude: {ss['SELECT_ORIGIN_pt_previous'][0]}")
+                    else:
+                        st.warning("Select an origin point by clicking on the map.")
+
+            return None
+        
+        @st.fragment
+        def select_node_DESTINATION():
+
+            key_prefix = "SELECT_DESTINATION"
+
+            pt_previous_key = f"{key_prefix}_pt_previous"
+            nearest_node_key = f"{key_prefix}_nearest_node"
+
+            if pt_previous_key not in ss:
+                ss[pt_previous_key] = (None,None)
+            if nearest_node_key not in ss:
+                ss[nearest_node_key] = None
+
+            mapcenter = (14.581912, 121.037947)
+            m2 = leafmap.Map(center = mapcenter)
+
+            m2.add_gdf(
+                city_geo,
+                layer_name = "Mandaluyong",
+                style_function = lambda x: {
+                    "color": "black",
+                    "opacity": 0.5,
+                    "fillOpacity": 0.0,
+                    "fillColor": "none",
+                },
+                control = False # this disables toggle
+            )
+
+            if ss[nearest_node_key] is not None:
+
+                m2.add_marker(
+                    location = tuple(
+                        nodes_selectable.loc[
+                            ss[nearest_node_key]["Node ID"],
+                            ["y", "x"]
+                        ]
+                    ),
+                    tooltip = "Destination",
+                    icon = folium.Icon(
+                        prefix = "fa",
+                        icon = "flag-checkered",
+                        color = "red"
+                    )
+                )
+
+            m2.fit_bounds(
+                [[14.565835, 121.014223],
+                [14.604602, 121.064785]],
+            )
+
+            col1, col2 = st.columns([3, 1.5])
+
+            with col1:
+                map_output = m2.to_streamlit(height = 300, bidirectional=True) # leafmap.foliumap has builtin support for st_folium, by setting bidirectional=True
+            
+            pt = map_output["last_clicked"]
+
+            if (pt is not None):
+
+                pt_tuple = (pt["lng"], pt["lat"])
+
+                if (pt_tuple != ss[pt_previous_key]):
+
+                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
+                    point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
+
+                    nearest_node = point_df.sjoin_nearest(nodes_selectable, how = "left")[["osmid", "x_left", "y_left", "geometry"]].rename({"osmid": "Node ID", "x_left": "Longitude", "y_left": "Latitude"}, axis = 1).iloc[0]
+
+                    ss[nearest_node_key] = nearest_node
+                    ss[pt_previous_key] = (pt["lng"], pt["lat"])
+
+                    st.rerun(scope = "fragment")
+
+            with col2:
+                with st.container(border = True):
+                    st.markdown("**Chosen Destination:**")
+                    if ss['SELECT_DESTINATION_nearest_node'] is not None:
+                        st.markdown(f"Node ID: {ss['SELECT_DESTINATION_nearest_node']['Node ID']}")
+                        st.markdown(f"Latitude: {ss['SELECT_DESTINATION_pt_previous'][1]}")
+                        st.markdown(f"Longitude: {ss['SELECT_DESTINATION_pt_previous'][0]}")
+                    else:
+                        st.warning("Select a destination point by clicking on the map.")
+
+            return None
+
+        ### deprecated, but would be nice if you could restrict it to always have at least one item selected
+
+        # node_type = st.segmented_control(
+        #     "segmented_control",
+        #     options=["Origin", "Destination"],
+        #     selection_mode="single",
+        #     default = "Origin",
+        #     label_visibility="collapsed"
+        # )
+
+        if "node_type" not in ss:
+            ss["node_type"] = "Origin"
+
+        col1, col2, empty = st.columns([1, 1, 4])
+
+        with col1:
+        
+            if st.button("Origin"):
+                ss["node_type"] = "Origin"
+
+        with col2:
+
+            if st.button("Destination"):
+                ss["node_type"] = "Destination"
+
+        node_type = ss["node_type"]
+
+        if node_type == "Origin":
+            select_node_ORIGIN()
+
+        elif node_type == "Destination":
+            select_node_DESTINATION()
+
+        if (ss["SELECT_ORIGIN_nearest_node"]) is None or (ss["SELECT_DESTINATION_nearest_node"] is None):
+            st.info("Before you can view routes, first select an origin and destination with the maps above.")
+            st.stop()
+            
+        node_o = ss["SELECT_ORIGIN_nearest_node"]["Node ID"]
+        node_d = ss["SELECT_DESTINATION_nearest_node"]["Node ID"]
+
+        if node_o == node_d:
+            st.warning("Choose two different points as origin and destination.")
+            disable_routes_map = True
+
 
     # Determine path based on beta
+    beta_options = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
 
-    cols = st.columns([1, 3, 1])
+    # cache the masks
+    @st.cache_data(ttl = None, max_entries=10)
+    def get_edge_masks(node_o, node_d, mode):
+        result = {}
+        for beta in beta_options:
+            path_nodes = routes_dict[beta][f"{node_o}, {node_d}"]
+            pairs = set([(path_nodes[i], path_nodes[i+1]) for i in range(0, len(path_nodes) - 1)])
 
-    with cols[1]:
+            edge_index_frame = edges.index.to_frame()
+            edge_mask = edge_index_frame[["u", "v"]].apply(lambda r: (r['u'], r['v']), axis = 1).isin(pairs)
 
-        beta = st.select_slider(
-            "Beta (Sensitivity to Discomfort)",
-            options = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
-            value = 0.0
+            result[beta] = edge_mask
+
+        return result
+
+    beta_to_edge_mask = get_edge_masks(node_o, node_d, mode = mode_option)
+
+    # Map with routes
+
+    @st.fragment
+    def show_routes_map():
+
+        mapcenter = (14.581912, 121.037947)
+        m = leafmap.Map(center = mapcenter)
+        
+        m.add_gdf(
+            city_geo,
+            layer_name = "Mandaluyong",
+            style_function = lambda x: {
+                "color": "black",
+                "opacity": 0.5,
+                "fillOpacity": 0.0,
+                "fillColor": "none",
+            },
+            control = False # this disables toggle
         )
 
-    path_nodes = routes_dict[beta][f"{node_o}, {node_d}"]
-    pairs = set([(path_nodes[i], path_nodes[i+1]) for i in range(0, len(path_nodes) - 1)])
+        # show routes for betas
 
-    edge_index_frame = edges.index.to_frame()
-    edge_mask = edge_index_frame[["u", "v"]].apply(lambda r: (r['u'], r['v']), axis = 1).isin(pairs)
+        style_blue_betas = lambda x: {
+            "color": "blue",
+            "weight": 10,
+            "opacity": 0.5
+        }
 
-    # Graph
+        style_grayed_betas = lambda x: {
+            "color": "gray",
+            "weight": 3,
+            "opacity": 0.5
+        }
 
-    fig, ax = plt.subplots(figsize = (10, 8))
-    ax.set_xlim(0.015+1.21e2, 0.065+1.21e2)
-    ax.set_ylim(14.565, 14.602)
-    plt.axis(False)
+        for beta in beta_options:
 
-    # city
-    brgy_geo_for_city.plot(aspect = 1, ax = ax, color = "black")
+            show_blue = (beta == 0.0)
 
-    # plot the edges
-    edges.plot(
-        aspect = 1,
-        ax = ax,
-        color = "white"
-    )
+            edge_mask = beta_to_edge_mask[beta]
 
-    edges.loc[edge_mask].plot(
-        aspect = 1,
-        ax = ax,
-        color = "yellow",
-        linewidth = 5,
-    )
+            row = {"beta": beta, "geometry": edges.loc[edge_mask].union_all()}
 
-    # plot the nodes
-    nodes_selectable.loc[[node_o, node_d]].plot(
-        ax = ax,
-        color = "red",
-        markersize = 500,
-    )
+            gdf = gpd.GeoDataFrame([row], crs = "EPSG:4326")
 
-    ### this can be used to verify that the filtered edges actually reflect the path as described in the list
-    # nodes.loc[path_nodes].plot(
-    #     ax = ax,
-    #     color = "blue",
-    #     markersize = 100,
-    # )
+            m.add_gdf(
+                gdf,
+                layer_name = f"gray Beta={beta} (NO TOGGLE)",
+                style_function = style_grayed_betas,
+                control = False,
+                show = True
+            )
 
-    with st.container(border = True):
+            blue_layer_name = f"Path (Beta={beta})"
 
-        st.pyplot(fig, use_container_width=True, clear_figure=False)
+            m.add_gdf(
+                gdf,
+                layer_name = blue_layer_name,
+                style_function = style_blue_betas,
+                control = True,
+                show = show_blue
+            )
+        # end loop
+
+        m.add_marker(
+            location = tuple(nodes_selectable.loc[node_o, ["y", "x"]]),
+            tooltip = "Origin",
+            icon = folium.Icon(
+                prefix = "fa",
+                icon = "circle-play",
+                color = "green"
+            )
+        )
+        
+        m.add_marker(
+            location = tuple(nodes_selectable.loc[node_d, ["y", "x"]]),
+            tooltip = "Destination",
+            icon = folium.Icon(
+                prefix = "fa",
+                icon = "flag-checkered",
+                color = "red",
+            ),
+        )
+
+        m.fit_bounds(
+            [[14.565835, 121.014223],
+            [14.604602, 121.064785]],
+        )
+
+        # search bar
+        folium.plugins.Geocoder().add_to(m)
+
+        m.to_streamlit(height = 400, bidirectional=False)
+
+        if st.button("Refresh"):
+            st.rerun(scope = "fragment")
+
+        return None
+    
+    st.divider()
+    
+    @st.fragment
+    def ask_toggle(set_value, disable_routes_map):
+        show_routes = st.toggle(
+            "Show Routes",
+            value = set_value,
+            disabled = disable_routes_map
+        )
+        return show_routes
+    
+    show_routes = ask_toggle(True, disable_routes_map)
+
+    if show_routes:
+    
+        show_routes_map()
