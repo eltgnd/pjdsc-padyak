@@ -100,7 +100,7 @@ def make_chart_for_subcomponent(subcomp_name, subcomp_group):
 
     return chart
 
-@st.cache_data(experimental_allow_widgets=True) # no need to set experimental_allow_widgets=True
+@st.cache_data
 def show_expander_for_subcomp(subcomp_name, exp_title, subcomp_group):
     with st.expander(exp_title, expanded = False):
 
