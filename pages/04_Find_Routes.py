@@ -233,8 +233,8 @@ if __name__ == "__main__":
             edges = Gw_edges
             nodes = Gw_nodes
             topic = "Walkability"
-            origin_default_osmid = 2139543216
-            destination_default_osmid = 5644815363
+            origin_default_osmid = 242433701
+            destination_default_osmid = 6773492701
             
         # Filter to selectable nodes (nodes that had been sampled from the complete set of nodes)
         nodes_selectable = nodes.loc[list_nodes_sampled].copy(deep = True)
