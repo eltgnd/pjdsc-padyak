@@ -309,7 +309,7 @@ if __name__ == "__main__":
 
 
         # for origin
-        key_prefix = "SELECT_ORIGIN"
+        key_prefix = f"{mode_option}_SELECT_ORIGIN"
 
         nearest_node_key = f"{key_prefix}_nearest_node"
 
@@ -322,7 +322,7 @@ if __name__ == "__main__":
             ss[nearest_node_key] = d
 
         # for destination
-        key_prefix = "SELECT_DESTINATION"
+        key_prefix = f"{mode_option}_SELECT_DESTINATION"
 
         nearest_node_key = f"{key_prefix}_nearest_node"
 
@@ -340,7 +340,7 @@ if __name__ == "__main__":
         @st.fragment
         def select_node(node_type = "Origin"):
 
-            key_prefix = f"SELECT_{node_type.upper()}"
+            key_prefix = f"{mode_option}_SELECT_{node_type.upper()}"
             nearest_node_key = f"{key_prefix}_nearest_node"
 
             mapcenter = (14.581912, 121.037947)
@@ -419,8 +419,8 @@ if __name__ == "__main__":
                     else:
                         st.warning("Select a destination point by clicking on the map.")
 
-            node_o = ss["SELECT_ORIGIN_nearest_node"]["Node ID"]
-            node_d = ss["SELECT_DESTINATION_nearest_node"]["Node ID"]
+            node_o = ss[f"{mode_option}_SELECT_ORIGIN_nearest_node"]["Node ID"]
+            node_d = ss[f"{mode_option}_SELECT_DESTINATION_nearest_node"]["Node ID"]
 
             st.caption(f"Origin: Node {node_o}")
             st.caption(f"Destination: Node {node_d}")
@@ -468,10 +468,10 @@ if __name__ == "__main__":
 
         select_node(node_type)
 
-        node_o = ss["SELECT_ORIGIN_nearest_node"]["Node ID"]
-        node_d = ss["SELECT_DESTINATION_nearest_node"]["Node ID"]
+        node_o = ss[f"{mode_option}_SELECT_ORIGIN_nearest_node"]["Node ID"]
+        node_d = ss[f"{mode_option}_SELECT_DESTINATION_nearest_node"]["Node ID"]
 
-        if (ss["SELECT_ORIGIN_nearest_node"]) is None or (ss["SELECT_DESTINATION_nearest_node"] is None):
+        if (ss[f"{mode_option}_SELECT_ORIGIN_nearest_node"]) is None or (ss[f"{mode_option}_SELECT_DESTINATION_nearest_node"] is None):
             st.info("Before you can view routes, first select an origin and destination with the maps above.")
             st.stop()
 
@@ -514,7 +514,7 @@ if __name__ == "__main__":
         def on_toggle_show_routes(data_key):
             ss["show_routes_default"] = ss[data_key]
 
-        this_key = "TOGGLE_SHOW_ROUTES"
+        this_key = f"{mode_option}_TOGGLE_SHOW_ROUTES"
         show_routes = st.toggle(
             "Show Routes",
             key = this_key,
@@ -639,7 +639,7 @@ if __name__ == "__main__":
         def on_toggle_show_curve(data_key):
             ss["show_curve_default"] = ss[data_key]
 
-        this_key = "TOGGLE_SHOW_CURVE"
+        this_key = f"{mode_option}_TOGGLE_SHOW_CURVE"
         show_curve = st.toggle(
             f"Compute {topic} Curve",
             key = this_key,
