@@ -200,7 +200,7 @@ if __name__ == "__main__":
             ss[pt_previous_key] = None
 
         if (nearest_node_key not in ss) or (node_was_manually_changed_key not in ss):
-            default_osmid = 1467807116
+            default_osmid = 2139543216
             ss[nearest_node_key] = {
                 "Node ID": default_osmid,
                 "Latitude": nodes_selectable.at[default_osmid, "y"],
@@ -321,7 +321,7 @@ if __name__ == "__main__":
             ss[pt_previous_key] = None
 
         if (nearest_node_key not in ss) or (node_was_manually_changed_key not in ss):
-            default_osmid = 12101126578
+            default_osmid = 5644815363
             ss[nearest_node_key] = {
                 "Node ID": default_osmid,
                 "Latitude": nodes_selectable.at[default_osmid, "y"],
