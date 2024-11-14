@@ -144,7 +144,7 @@ def display_single_area_analysis(city_metrics, city_results, place_name, mode):
     ).properties(
         title = f"{mode} Curve for {place_name}",
         width=650,
-        height=400
+        height=450
     )
 
     st.altair_chart(chart)

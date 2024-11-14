@@ -183,6 +183,12 @@ if __name__ == "__main__":
         ss["brgy_geo_for_city"] = a
         ss["city_geo"] = b
 
+    if "selected_nodes_were_just_updated" not in ss:
+        ss["selected_nodes_were_just_updated"] = False
+
+    if "analyses_were_just_updated" not in ss:
+        ss["analyses_were_just_updated"] = False
+
     if any([(key not in ss) for key in ["distance_matrix_b_SAMPLED_NODES_ONLY", "distance_matrix_w_SAMPLED_NODES_ONLY"]]):
         a, b = load_straight_line_distances()
         ss["distance_matrix_b_SAMPLED_NODES_ONLY"] = a
@@ -204,6 +210,8 @@ if __name__ == "__main__":
     city_geo = ss["city_geo"]
 
     beta_options = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+
+    final_adjustment = False
 
     # START
     st.markdown("# Find Routes based on Discomfort Sensitivity")
@@ -265,6 +273,8 @@ if __name__ == "__main__":
 
         # Select nodes by Node ID
 
+        st.markdown("You can search for nodes using their ID, by **typing into the boxes below**.")
+
         col1, col2 = st.columns([1, 1])
 
         with col1:
@@ -297,158 +307,41 @@ if __name__ == "__main__":
     
         # Map for selecting nodes
 
-        if "rerun_just_occurred" not in ss:
-            ss["rerun_just_occurred"] = False
-
-        if "SELECT_ORIGIN_node_was_manually_changed" not in ss:
-            ss["SELECT_ORIGIN_node_was_manually_changed"] = False
-        if "SELECT_DESTINATION_node_was_manually_changed" not in ss:
-            ss["SELECT_DESTINATION_node_was_manually_changed"] = False
-
 
         # for origin
         key_prefix = "SELECT_ORIGIN"
 
-        pt_previous_key = f"{key_prefix}_pt_previous"
         nearest_node_key = f"{key_prefix}_nearest_node"
-        node_was_manually_changed_key = f"{key_prefix}_node_was_manually_changed"
 
-        if pt_previous_key not in ss:
-            ss[pt_previous_key] = None
-
-        if (nearest_node_key not in ss) or (node_was_manually_changed_key not in ss):
-            ss[nearest_node_key] = {
+        if (nearest_node_key not in ss):
+            d = {
                 "Node ID": origin_default_osmid,
                 "Latitude": nodes_selectable.at[origin_default_osmid, "y"],
                 "Longitude": nodes_selectable.at[origin_default_osmid, "x"]
             }
-
-        @st.fragment
-        def select_node_ORIGIN():
-
-            key_prefix = "SELECT_ORIGIN"
-
-            pt_previous_key = f"{key_prefix}_pt_previous"
-            nearest_node_key = f"{key_prefix}_nearest_node"
-            node_was_manually_changed_key = f"{key_prefix}_node_was_manually_changed"
-
-            mapcenter = (14.581912, 121.037947)
-
-            m1 = leafmap.Map(center = mapcenter)
-
-            m1.add_gdf(
-                city_geo,
-                layer_name = "Mandaluyong",
-                style_function = lambda x: {
-                    "color": "black",
-                    "opacity": 0.5,
-                    "fillOpacity": 0.0,
-                    "fillColor": "none",
-                },
-                control = False # this disables toggle
-            )
-
-            if ss[nearest_node_key] is not None:
-
-                m1.add_marker(
-                    location = tuple(
-                        nodes_selectable.loc[
-                            ss[nearest_node_key]["Node ID"],
-                            ["y", "x"]
-                        ]
-                    ),
-                    tooltip = "Origin",
-                    icon = folium.Icon(
-                        prefix = "fa",
-                        icon = "circle-play",
-                        color = "green"
-                    )
-                )
-            
-            m1.fit_bounds(
-                [[14.565835, 121.014223],
-                [14.604602, 121.064785]],
-            )
-
-            # search bar
-            folium.plugins.Geocoder().add_to(m1)
-
-            col1, col2 = st.columns([3, 1.5])
-
-            with col1:
-                map_output = m1.to_streamlit(height = 300, bidirectional=True) # leafmap.foliumap has builtin support for st_folium, by setting bidirectional=True
-
-            pt = map_output["last_clicked"]
-
-            if (pt is not None):
-
-                pt_tuple = (pt["lng"], pt["lat"])
-
-                if (pt_tuple != ss[pt_previous_key]):
-
-                    ss[node_was_manually_changed_key] = True
-
-                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
-                    point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
-                    point_df = point_df.set_crs("EPSG:4326")
-
-                    nearest_node = point_df.sjoin_nearest(nodes_selectable, how = "left")[["osmid", "x_left", "y_left", "geometry"]].rename({"osmid": "Node ID", "x_left": "Longitude", "y_left": "Latitude"}, axis = 1).iloc[0]
-
-                    ss[nearest_node_key] = nearest_node
-                    ss[pt_previous_key] = (nearest_node["Longitude"], nearest_node["Latitude"])
-
-                    rerun_all = False
-                    if "SELECT_DESTINATION_nearest_node" in ss:
-                        if (ss["SELECT_DESTINATION_nearest_node"] is not None):
-                            rerun_all = True
-
-                    if rerun_all:
-                        if not ss["rerun_just_occurred"]:
-                            ss["rerun_just_occurred"] = True
-                            st.rerun(scope = "app")
-                    else:
-                        if (not ss["rerun_just_occurred"]):
-                            st.rerun(scope = "fragment")
-
-            with col2:
-                with st.container(border = True):
-                    st.markdown("**Your Origin:** 🟢")
-                    if (ss[nearest_node_key] is not None):
-                        st.markdown(f"Node ID: {ss[nearest_node_key]['Node ID']}")
-                        st.markdown(f"Latitude: {ss[nearest_node_key]['Latitude']}")
-                        st.markdown(f"Longitude: {ss[nearest_node_key]['Longitude']}")
-                    else:
-                        st.warning("Select an origin point by clicking on the map.")
-
-            return None
-        
+            ss[nearest_node_key] = d
 
         # for destination
         key_prefix = "SELECT_DESTINATION"
 
-        pt_previous_key = f"{key_prefix}_pt_previous"
         nearest_node_key = f"{key_prefix}_nearest_node"
-        node_was_manually_changed_key = f"{key_prefix}_node_was_manually_changed"
 
-        if pt_previous_key not in ss:
-            ss[pt_previous_key] = None
-
-        if (nearest_node_key not in ss) or (node_was_manually_changed_key not in ss):
-            ss[nearest_node_key] = {
+        if (nearest_node_key not in ss):
+            d = {
                 "Node ID": destination_default_osmid,
                 "Latitude": nodes_selectable.at[destination_default_osmid, "y"],
                 "Longitude": nodes_selectable.at[destination_default_osmid, "x"]
             }
-            ss[node_was_manually_changed_key] = True
+            ss[nearest_node_key] = d
+
+
+        # TEST ONLY: unified fragment
 
         @st.fragment
-        def select_node_DESTINATION():
+        def select_node(node_type = "Origin"):
 
-            key_prefix = "SELECT_DESTINATION"
-
-            pt_previous_key = f"{key_prefix}_pt_previous"
+            key_prefix = f"SELECT_{node_type.upper()}"
             nearest_node_key = f"{key_prefix}_nearest_node"
-            node_was_manually_changed_key = f"{key_prefix}_node_was_manually_changed"
 
             mapcenter = (14.581912, 121.037947)
             m2 = leafmap.Map(center = mapcenter)
@@ -474,11 +367,11 @@ if __name__ == "__main__":
                             ["y", "x"]
                         ]
                     ),
-                    tooltip = "Destination",
+                    tooltip = node_type,
                     icon = folium.Icon(
                         prefix = "fa",
-                        icon = "flag-checkered",
-                        color = "red"
+                        icon = "circle-play" if node_type == "Origin" else "flag-checkered",
+                        color = "green" if node_type == "Origin" else "red"
                     )
                 )
 
@@ -499,11 +392,7 @@ if __name__ == "__main__":
 
             if (pt is not None):
 
-                pt_tuple = (pt["lng"], pt["lat"])
-
-                if (pt_tuple != ss[pt_previous_key]):
-
-                    ss[node_was_manually_changed_key] = True
+                with st.spinner("Finding a place close to where you clicked..."):
 
                     point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
                     point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
@@ -511,24 +400,18 @@ if __name__ == "__main__":
 
                     nearest_node = point_df.sjoin_nearest(nodes_selectable, how = "left")[["osmid", "x_left", "y_left", "geometry"]].rename({"osmid": "Node ID", "x_left": "Longitude", "y_left": "Latitude"}, axis = 1).iloc[0]
 
-                    ss[nearest_node_key] = nearest_node
-                    ss[pt_previous_key] = (nearest_node["Longitude"], nearest_node["Latitude"])
-                    rerun_all = False
-                    if "SELECT_ORIGIN_nearest_node" in ss:
-                        if (ss["SELECT_ORIGIN_nearest_node"] is not None):
-                            rerun_all = True
+                    if (nearest_node["Node ID"] != ss[nearest_node_key]["Node ID"]):
 
-                    if rerun_all:
-                        if not ss["rerun_just_occurred"]:
-                            ss["rerun_just_occurred"] = True
-                            st.rerun(scope = "app")
-                    else:
-                        if (not ss["rerun_just_occurred"]):
-                            st.rerun(scope = "fragment")
+                        ss[nearest_node_key] = nearest_node
+                        
+                        ss["selected_nodes_were_just_updated"] = True
+                        print("RERUN FRAGMENT")
+                        st.rerun(scope = "fragment")
 
             with col2:
                 with st.container(border = True):
-                    st.markdown("**Your Destination:** 🔴")
+                    circle = "🟢" if node_type == "Origin" else "🔴" 
+                    st.markdown(f"**Your {node_type}:** {circle}")
                     if (ss[nearest_node_key] is not None):
                         st.markdown(f"Node ID: {ss[nearest_node_key]['Node ID']}")
                         st.markdown(f"Latitude: {ss[nearest_node_key]['Latitude']}")
@@ -536,8 +419,28 @@ if __name__ == "__main__":
                     else:
                         st.warning("Select a destination point by clicking on the map.")
 
+            node_o = ss["SELECT_ORIGIN_nearest_node"]["Node ID"]
+            node_d = ss["SELECT_DESTINATION_nearest_node"]["Node ID"]
+
+            st.caption(f"Origin: Node {node_o}")
+            st.caption(f"Destination: Node {node_d}")
+
+            if ss["selected_nodes_were_just_updated"] and (ss["show_curve_default"] or ss["show_routes_default"]) and (not ss["analyses_were_just_updated"]):
+                col1, col2, empty = st.columns([2, 1, 1])
+                with col1:
+                    st.markdown("You changed your origin/destination selection. Click the button to apply changes.")
+                with col2:
+                    if st.button("**Update analyses**"):
+                        ss["analyses_were_just_updated"] = True
+                        print("RERUN WHOLE APP")
+                        st.rerun(scope = "app")
+
             return None
-        
+            # end of unified fragment function
+
+
+        # done defining functions. now implement.
+
         if "node_type" not in ss:
             ss["node_type"] = "Origin"
 
@@ -563,26 +466,25 @@ if __name__ == "__main__":
 
         node_type = ss["node_type"]
 
-        if node_type == "Origin":
-            select_node_ORIGIN()
+        select_node(node_type)
 
-        elif node_type == "Destination":
-            select_node_DESTINATION()
+        node_o = ss["SELECT_ORIGIN_nearest_node"]["Node ID"]
+        node_d = ss["SELECT_DESTINATION_nearest_node"]["Node ID"]
 
         if (ss["SELECT_ORIGIN_nearest_node"]) is None or (ss["SELECT_DESTINATION_nearest_node"] is None):
             st.info("Before you can view routes, first select an origin and destination with the maps above.")
             st.stop()
-            
-        node_o = ss["SELECT_ORIGIN_nearest_node"]["Node ID"]
-        node_d = ss["SELECT_DESTINATION_nearest_node"]["Node ID"]
 
         if node_o == node_d:
             st.warning("Choose two different points as origin and destination.")
             st.stop()
 
+        if ss["selected_nodes_were_just_updated"] and ss["analyses_were_just_updated"]:
+            final_adjustment = True
+            ss["selected_nodes_were_just_updated"] = False
+            ss["analyses_were_just_updated"] = False
+            empty_container = st.empty()
 
-        # if ss["rerun_just_occurred"]:
-        #     ss["rerun_just_occurred"] = False
 
     # cache the masks
     @st.cache_data(ttl = None, max_entries=2)
@@ -603,12 +505,22 @@ if __name__ == "__main__":
 
     st.divider()
 
-    @st.fragment
-    def show_routes_map():
+    if "show_routes_default" not in ss:
+        ss["show_routes_default"] = False
 
+    @st.fragment
+    def show_routes_map(node_o, node_d, mode_option):
+
+        def on_toggle_show_routes(data_key):
+            ss["show_routes_default"] = ss[data_key]
+
+        this_key = "TOGGLE_SHOW_ROUTES"
         show_routes = st.toggle(
             "Show Routes",
-            value = False
+            key = this_key,
+            value = ss["show_routes_default"],
+            on_change = on_toggle_show_routes,
+            args = (this_key,)
         )
 
         if show_routes:
@@ -714,19 +626,32 @@ if __name__ == "__main__":
 
         return None
     
-    show_routes_map()
+    show_routes_map(node_o, node_d, mode_option)
 
     st.divider()
 
-    @st.fragment
-    def show_curve_plot():
+    if "show_curve_default" not in ss:
+        ss["show_curve_default"] = False
 
+    @st.fragment
+    def show_curve_plot(node_o, node_d, mode_option):
+
+        def on_toggle_show_curve(data_key):
+            ss["show_curve_default"] = ss[data_key]
+
+        this_key = "TOGGLE_SHOW_CURVE"
         show_curve = st.toggle(
             f"Compute {topic} Curve",
-            value = False,
+            key = this_key,
+            value = ss["show_curve_default"],
+            on_change = on_toggle_show_curve,
+            args = (this_key,)
         )
 
         if show_curve:
+
+            st.caption(f"Origin: Node {node_o}")
+            st.caption(f"Destination: Node {node_d}")
 
             path_specific_results = compute_path_specific_results_for_curve(node_o, node_d, mode = mode_option)
             
@@ -744,4 +669,8 @@ if __name__ == "__main__":
 
         return None
 
-    show_curve_plot()
+    show_curve_plot(node_o, node_d, mode_option)
+
+    if final_adjustment:
+        with empty_container:
+            st.success("Analyses successfully updated using new origin and destination.")
