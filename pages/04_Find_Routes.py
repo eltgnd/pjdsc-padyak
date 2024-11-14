@@ -9,7 +9,10 @@ import geopandas as gpd
 import pickle
 import leafmap.foliumap as leafmap
 import folium
-from streamlit_folium import st_folium
+# from streamlit_folium import st_folium
+### no need to import streamlit_folium, but note it's a dependency
+
+from shared_functions import tradeoff_rate, tradeoff_rates_from_results, display_explanation_expander, display_single_area_analysis
 
 
 #--------------------------------------------
@@ -28,7 +31,45 @@ st.set_page_config(page_title=page_title, page_icon=page_icon, layout="centered"
 
 # Preparations
 
+def calculate_path_cost(path_nodes, cost_attribute):
+    path_cost = 0
+    pairs = set([(path_nodes[i], path_nodes[i+1]) for i in range(0, len(path_nodes) - 1)])
 
+    edge_index_frame = edges.index.to_frame()
+    edge_mask = edge_index_frame[["u", "v"]].apply(lambda r: (r['u'], r['v']), axis = 1).isin(pairs)
+
+    filtered_edges = edges.loc[edge_mask]
+
+    path_cost = filtered_edges[cost_attribute].sum()
+
+    return path_cost
+
+def metrics_from_single_optimal_path(path_nodes, beta, sld_function, record_relative_values = True):
+
+    o, d = path_nodes[0], path_nodes[-1]
+            
+    dist_travelled_raw = calculate_path_cost(path_nodes, "length")
+    distance_term = dist_travelled_raw
+    discomfort_term_unweighted =  calculate_path_cost(path_nodes, "DISCOMFORT_WEIGHTED_BY_BETA")
+
+    # IMPORTANT: yes, unweighted terms should come from the calculation that uses "DISCOMFORT_WEIGHTED_BY_BETA". This is because the provided graph is assumed to provide values weighted by beta=1.
+    discomfort_term_weighted = discomfort_term_unweighted * beta # note this only matters for how the optimization worked but doesnt matter at all for interpretation
+
+    if record_relative_values:
+
+        euclidean_distance = sld_function(o, d)
+        
+        discomfort_term_unweighted = discomfort_term_unweighted / dist_travelled_raw
+        discomfort_term_weighted = discomfort_term_weighted / dist_travelled_raw
+        distance_term = distance_term / euclidean_distance
+
+    ev_distance = distance_term
+    ev_discomfort_weighted = discomfort_term_weighted # note this only matters for how the optimization worked but doesnt matter at all for interpretation
+    ev_discomfort_unweighted = discomfort_term_unweighted
+
+    return ev_distance, ev_discomfort_weighted, ev_discomfort_unweighted # unweighted comes last in output! it matters
+
+@st.cache_data(ttl = None, max_entries = 10)
 def load_routes_data():
     folder = "discomfort_and_curve_data/routes_data2/"
 
@@ -62,9 +103,9 @@ def load_routes_data():
 def load_nodes_and_edges():
     folder = "discomfort_and_curve_data/"
 
-    Gb_edges = gpd.read_feather(folder + "Gb_edges.feather")[["geometry"]].copy(deep = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
+    Gb_edges = gpd.read_feather(folder + "Gb_edges.feather")[["geometry", "length", "OBJECTIVE", "DISCOMFORT_WEIGHTED_BY_BETA"]].copy(deep = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
     Gb_nodes = gpd.read_feather(folder + "Gb_nodes.feather")[["x", "y", "geometry"]].copy(deep = True).sort_values(["y", "x"], ascending = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
-    Gw_edges = gpd.read_feather(folder + "Gw_edges.feather")[["geometry"]].copy(deep = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
+    Gw_edges = gpd.read_feather(folder + "Gw_edges.feather")[["geometry", "length", "OBJECTIVE", "DISCOMFORT_WEIGHTED_BY_BETA"]].copy(deep = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
     Gw_nodes = gpd.read_feather(folder + "Gw_nodes.feather")[["x", "y", "geometry"]].copy(deep = True).sort_values(["y", "x"], ascending = True).select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
 
     return Gb_nodes, Gw_nodes, Gb_edges, Gw_edges
@@ -76,6 +117,13 @@ def load_brgy_geo():
     city_geo = gpd.GeoDataFrame({"geometry": [brgy_geo_for_city.union_all()]})
 
     return brgy_geo_for_city, city_geo
+
+@st.cache_data(ttl = None, max_entries = 10)
+def load_straight_line_distances():
+    distance_matrix_b_SAMPLED_NODES_ONLY = pd.read_csv("discomfort_and_curve_data/straight_line_distances/distance_matrix_b_SAMPLED_NODES_ONLY.csv", index_col = "osmid")
+    distance_matrix_w_SAMPLED_NODES_ONLY = pd.read_csv("discomfort_and_curve_data/straight_line_distances/distance_matrix_w_SAMPLED_NODES_ONLY.csv", index_col = "osmid")
+
+    return distance_matrix_b_SAMPLED_NODES_ONLY, distance_matrix_w_SAMPLED_NODES_ONLY
 
 # Main
 
@@ -104,6 +152,17 @@ if __name__ == "__main__":
         ss["brgy_geo_for_city"] = a
         ss["city_geo"] = b
 
+    if any([(key not in ss) for key in ["distance_matrix_b_SAMPLED_NODES_ONLY", "distance_matrix_w_SAMPLED_NODES_ONLY"]]):
+        a, b = load_straight_line_distances()
+        ss["distance_matrix_b_SAMPLED_NODES_ONLY"] = a
+        ss["distance_matrix_w_SAMPLED_NODES_ONLY"] = b
+
+    def SLD_meters_b_lookup(node1_osmid, node2_osmid):
+        return ss["distance_matrix_b_SAMPLED_NODES_ONLY"].at[node1_osmid, str(node2_osmid)] # columns are also osmids but represented as strings
+
+    def SLD_meters_w_lookup(node1_osmid, node2_osmid):
+        return ss["distance_matrix_w_SAMPLED_NODES_ONLY"].at[node1_osmid, str(node2_osmid)] # columns are also osmids but represented as strings
+
     # DATA
     b_list_nodes_sampled, w_list_nodes_sampled, bike_routes_dict, walk_routes_dict = ss["b_list_nodes_sampled"], ss["w_list_nodes_sampled"], ss["bike_routes_dict"], ss["walk_routes_dict"]
 
@@ -112,7 +171,6 @@ if __name__ == "__main__":
 
     brgy_geo_for_city = ss["brgy_geo_for_city"]
     city_geo = ss["city_geo"]
-
 
     # START
     st.markdown("# Find Routes based on Discomfort Sensitivity")
@@ -128,22 +186,24 @@ if __name__ == "__main__":
         routes_dict = bike_routes_dict
         edges = Gb_edges
         nodes = Gb_nodes
+        topic = "Bikeability"
 
     elif mode_option == "Walking":
         list_nodes_sampled = w_list_nodes_sampled
         routes_dict = walk_routes_dict
         edges = Gw_edges
         nodes = Gw_nodes
+        topic = "Walkability"
 
     # Filter to selectable nodes (nodes that had been sampled from the complete set of nodes)
     nodes_selectable = nodes.loc[list_nodes_sampled]
 
     # Choose origin and destination via node ID
 
-    method_options = ["Node ID (input identifier of a location)", "Map (click to select points)"]
+    method_options = ["**Node ID**: Input ID of a location.", "**Map**: Click to select points."]
 
     method_of_node_selection = st.radio(
-        "Select origin and destination by:",
+        "Select origin and destination using:",
         options = (0, 1),
         format_func = lambda x: method_options[x]
     )
@@ -156,19 +216,25 @@ if __name__ == "__main__":
 
         with col1:
 
+            default_osmid = 2139543216
+            default_index = nodes_selectable.index.to_list().index(default_osmid)
+
             node_o = st.selectbox(
                 "Origin",
                 options = nodes_selectable.index,
-                index = 0,
+                index = default_index,
                 format_func = lambda x: f"Node {x}"
             )
 
         with col2:
 
+            default_osmid = 5644815363
+            default_index = nodes_selectable.index.to_list().index(default_osmid)
+
             node_d = st.selectbox(
                 "Destination",
                 options = nodes_selectable.index,
-                index = 10,
+                index = default_index,
                 format_func = lambda x: f"Node {x}"
             )
 
@@ -290,9 +356,6 @@ if __name__ == "__main__":
                         if not ss["rerun_just_occurred"]:
                             ss["rerun_just_occurred"] = True
                             st.rerun(scope = "app")
-                        # else:
-                        #     if ss["rerun_triggerer"] == "Origin":
-                        #         ss["rerun_just_occurred"] = False
                     else:
                         if (not ss["rerun_just_occurred"]):
                             st.rerun(scope = "fragment")
@@ -410,9 +473,6 @@ if __name__ == "__main__":
                         if not ss["rerun_just_occurred"]:
                             ss["rerun_just_occurred"] = True
                             st.rerun(scope = "app")
-                        # else:
-                        #     if ss["rerun_triggerer"] == "Destination":
-                        #         ss["rerun_just_occurred"] = False
                     else:
                         if (not ss["rerun_just_occurred"]):
                             st.rerun(scope = "fragment")
@@ -597,3 +657,46 @@ if __name__ == "__main__":
         ss["rerun_just_occurred"] = False
     
         show_routes_map()
+
+    st.divider()
+
+    show_curve = st.toggle(
+        f"Compute {topic} Curve",
+        value = False
+    )
+
+    if show_curve:
+
+        @st.cache_data(ttl = None, max_entries = 10)
+        def compute_path_specific_results_for_curve(node_o, node_d, mode):
+            rows = []
+
+            for beta in beta_options:
+
+                ev_distance, ev_discomfort_weighted, ev_discomfort_unweighted = metrics_from_single_optimal_path(
+                    path_nodes = routes_dict[beta][f"{node_o}, {node_d}"],
+                    beta = beta,
+                    sld_function = SLD_meters_b_lookup if (mode == "Cycling") else SLD_meters_w_lookup
+                )
+
+                new_row = {
+                    "beta": beta,
+                    "relative_distance": ev_distance,
+                    "relative_discomfort": ev_discomfort_unweighted # unweighted is the important one
+                    # these are the only necessary columns
+                }
+
+                rows.append(new_row)
+
+            path_specific_results = pd.DataFrame(rows)
+
+            return path_specific_results
+        
+        path_specific_results = compute_path_specific_results_for_curve(node_o, node_d, mode = mode_option)
+
+        display_single_area_analysis(
+            None, # not needed
+            path_specific_results,
+            place_name = "Your Chosen Origin and Destination",
+            mode = topic
+        )
