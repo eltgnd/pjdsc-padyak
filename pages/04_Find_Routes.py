@@ -114,7 +114,7 @@ def load_nodes_and_edges():
 def load_brgy_geo():
     folder = "discomfort_and_curve_data/"
     brgy_geo_for_city = gpd.read_feather(folder + "brgy_geo_for_city.feather").fillna("").select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
-    city_geo = gpd.GeoDataFrame({"geometry": [brgy_geo_for_city.union_all()]})
+    city_geo = gpd.GeoDataFrame({"geometry": [brgy_geo_for_city.union_all()]}).set_crs("EPSG:4326")
 
     return brgy_geo_for_city, city_geo
 
@@ -124,6 +124,37 @@ def load_straight_line_distances():
     distance_matrix_w_SAMPLED_NODES_ONLY = pd.read_csv("discomfort_and_curve_data/straight_line_distances/distance_matrix_w_SAMPLED_NODES_ONLY.csv", index_col = "osmid")
 
     return distance_matrix_b_SAMPLED_NODES_ONLY, distance_matrix_w_SAMPLED_NODES_ONLY
+
+@st.cache_data(ttl = None, max_entries = 10)
+def compute_path_specific_results_for_curve(node_o, node_d, mode):
+    rows = []
+
+    progressbar = st.progress(int(0), "Computing curve...")
+
+    for i, beta in enumerate(beta_options):
+        part = i + 1
+        progressbar.progress(100 * part // (4 // 3 * len(beta_options)))
+
+        ev_distance, ev_discomfort_weighted, ev_discomfort_unweighted = metrics_from_single_optimal_path(
+            path_nodes = routes_dict[beta][f"{node_o}, {node_d}"],
+            beta = beta,
+            sld_function = SLD_meters_b_lookup if (mode == "Cycling") else SLD_meters_w_lookup
+        )
+
+        new_row = {
+            "beta": beta,
+            "relative_distance": ev_distance,
+            "relative_discomfort": ev_discomfort_unweighted # unweighted is the important one
+            # these are the only necessary columns
+        }
+
+        rows.append(new_row)
+
+    path_specific_results = pd.DataFrame(rows)
+
+    progressbar.empty()
+
+    return path_specific_results
 
 # Main
 
@@ -175,49 +206,66 @@ if __name__ == "__main__":
     # START
     st.markdown("# Find Routes based on Discomfort Sensitivity")
 
-    mode_option = st.radio(
-        "Mode of Active Transport",
-        options = ["Cycling", "Walking"],
-        horizontal=True
-    )
+    col1, col2, empty = st.columns([2, 2, 1])
+    
+    with col1:
+        mode_option = st.radio(
+            "Mode of Active Transport",
+            options = ["Cycling", "Walking"],
+            horizontal=True
+        )
 
-    if mode_option == "Cycling":
-        list_nodes_sampled = b_list_nodes_sampled
-        routes_dict = bike_routes_dict
-        edges = Gb_edges
-        nodes = Gb_nodes
-        topic = "Bikeability"
+    @st.cache_data(ttl = None, max_entries = 5)
+    def get_only_data_necessary(mode):
 
-    elif mode_option == "Walking":
-        list_nodes_sampled = w_list_nodes_sampled
-        routes_dict = walk_routes_dict
-        edges = Gw_edges
-        nodes = Gw_nodes
-        topic = "Walkability"
+        if mode == "Cycling":
+            list_nodes_sampled = b_list_nodes_sampled
+            routes_dict = bike_routes_dict
+            edges = Gb_edges
+            nodes = Gb_nodes
+            topic = "Bikeability"
+            origin_default_osmid = 2139543216
+            destination_default_osmid = 5644815363
 
-    # Filter to selectable nodes (nodes that had been sampled from the complete set of nodes)
-    nodes_selectable = nodes.loc[list_nodes_sampled]
+        elif mode == "Walking":
+            list_nodes_sampled = w_list_nodes_sampled
+            routes_dict = walk_routes_dict
+            edges = Gw_edges
+            nodes = Gw_nodes
+            topic = "Walkability"
+            origin_default_osmid = 2139543216
+            destination_default_osmid = 5644815363
+            
+        # Filter to selectable nodes (nodes that had been sampled from the complete set of nodes)
+        nodes_selectable = nodes.loc[list_nodes_sampled].copy(deep = True)
 
-    # Choose origin and destination via node ID
+        return list_nodes_sampled, routes_dict, edges, nodes, nodes_selectable, topic, origin_default_osmid, destination_default_osmid
+    
+    list_nodes_sampled, routes_dict, edges, nodes, nodes_selectable, topic, origin_default_osmid, destination_default_osmid = get_only_data_necessary(mode_option)
 
-    method_options = ["**Node ID**: Input ID of a location.", "**Map**: Click to select points."]
+    # Choose origin and destination
 
-    method_of_node_selection = st.radio(
-        "Select origin and destination using:",
-        options = (0, 1),
-        format_func = lambda x: method_options[x]
-    )
+    with col2:
+
+        method_options = ["**Node ID**: Input ID of a location.", "**Map**: Click to select points."]
+
+        method_of_node_selection = st.radio(
+            "Select origin and destination using:",
+            options = (0, 1),
+            format_func = lambda x: method_options[x]
+        )
 
     st.divider()
 
     if method_of_node_selection == 0:
 
+        # Select nodes by Node ID
+
         col1, col2 = st.columns([1, 1])
 
         with col1:
 
-            default_osmid = 2139543216
-            default_index = nodes_selectable.index.to_list().index(default_osmid)
+            default_index = nodes_selectable.index.to_list().index(origin_default_osmid)
 
             node_o = st.selectbox(
                 "Origin",
@@ -228,8 +276,7 @@ if __name__ == "__main__":
 
         with col2:
 
-            default_osmid = 5644815363
-            default_index = nodes_selectable.index.to_list().index(default_osmid)
+            default_index = nodes_selectable.index.to_list().index(destination_default_osmid)
 
             node_d = st.selectbox(
                 "Destination",
@@ -266,12 +313,13 @@ if __name__ == "__main__":
             ss[pt_previous_key] = None
 
         if (nearest_node_key not in ss) or (node_was_manually_changed_key not in ss):
-            default_osmid = 2139543216
             ss[nearest_node_key] = {
-                "Node ID": default_osmid,
-                "Latitude": nodes_selectable.at[default_osmid, "y"],
-                "Longitude": nodes_selectable.at[default_osmid, "x"]
+                "Node ID": origin_default_osmid,
+                "Latitude": nodes_selectable.at[origin_default_osmid, "y"],
+                "Longitude": nodes_selectable.at[origin_default_osmid, "x"]
             }
+            # TEST ONLY
+            ss[nearest_node_key] = None
             ss[node_was_manually_changed_key] = True
 
         @st.fragment
@@ -339,13 +387,14 @@ if __name__ == "__main__":
 
                     ss[node_was_manually_changed_key] = True
 
-                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
+                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}], crs = "EPSG:4326")
                     point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
+                    point_df = point_df.set_crs("EPSG:4326")
 
                     nearest_node = point_df.sjoin_nearest(nodes_selectable, how = "left")[["osmid", "x_left", "y_left", "geometry"]].rename({"osmid": "Node ID", "x_left": "Longitude", "y_left": "Latitude"}, axis = 1).iloc[0]
 
                     ss[nearest_node_key] = nearest_node
-                    ss[pt_previous_key] = (pt["lng"], pt["lat"])
+                    ss[pt_previous_key] = (nearest_node["Longitude"], nearest_node["Latitude"])
 
                     rerun_all = False
                     if "SELECT_DESTINATION_nearest_node" in ss:
@@ -384,11 +433,10 @@ if __name__ == "__main__":
             ss[pt_previous_key] = None
 
         if (nearest_node_key not in ss) or (node_was_manually_changed_key not in ss):
-            default_osmid = 5644815363
             ss[nearest_node_key] = {
-                "Node ID": default_osmid,
-                "Latitude": nodes_selectable.at[default_osmid, "y"],
-                "Longitude": nodes_selectable.at[default_osmid, "x"]
+                "Node ID": destination_default_osmid,
+                "Latitude": nodes_selectable.at[destination_default_osmid, "y"],
+                "Longitude": nodes_selectable.at[destination_default_osmid, "x"]
             }
             ss[node_was_manually_changed_key] = True
 
@@ -456,14 +504,14 @@ if __name__ == "__main__":
 
                     ss[node_was_manually_changed_key] = True
 
-                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
+                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}], crs = "EPSG:4326")
                     point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
+                    point_df = point_df.set_crs("EPSG:4326")
 
                     nearest_node = point_df.sjoin_nearest(nodes_selectable, how = "left")[["osmid", "x_left", "y_left", "geometry"]].rename({"osmid": "Node ID", "x_left": "Longitude", "y_left": "Latitude"}, axis = 1).iloc[0]
 
                     ss[nearest_node_key] = nearest_node
-                    ss[pt_previous_key] = (pt["lng"], pt["lat"])
-
+                    ss[pt_previous_key] = (nearest_node["Longitude"], nearest_node["Latitude"])
                     rerun_all = False
                     if "SELECT_ORIGIN_nearest_node" in ss:
                         if (ss["SELECT_ORIGIN_nearest_node"] is not None):
@@ -548,155 +596,146 @@ if __name__ == "__main__":
 
     # Map with routes
 
+    st.divider()
+
     @st.fragment
     def show_routes_map():
 
-        mapcenter = (14.581912, 121.037947)
-        m = leafmap.Map(center = mapcenter)
-        
-        m.add_gdf(
-            city_geo,
-            layer_name = "Mandaluyong",
-            style_function = lambda x: {
-                "color": "black",
-                "opacity": 0.5,
-                "fillOpacity": 0.0,
-                "fillColor": "none",
-            },
-            control = False # this disables toggle
+        show_routes = st.toggle(
+            "Show Routes",
+            value = True
         )
 
-        # show routes for betas
+        if show_routes:
 
-        style_selected_betas = lambda x: {
-            "color": "blue",
-            "weight": 10,
-            "opacity": 0.5
-        }
+            ss["rerun_just_occurred"] = False
 
-        style_grayed_betas = lambda x: {
-            "color": "gray",
-            "weight": 3,
-            "opacity": 0.5
-        }
-
-        for beta in beta_options:
-
-            show_selected_beta_routes = (beta == 0.0)
-
-            edge_mask = beta_to_edge_mask[beta]
-
-            row = {"beta": beta, "geometry": edges.loc[edge_mask].union_all()}
-
-            gdf = gpd.GeoDataFrame([row], crs = "EPSG:4326")
-
+            mapcenter = (14.581912, 121.037947)
+            m = leafmap.Map(center = mapcenter)
+            
             m.add_gdf(
-                gdf,
-                layer_name = f"gray Beta={beta} (NO TOGGLE)",
-                style_function = style_grayed_betas,
-                control = False,
-                show = True
+                city_geo,
+                layer_name = "Mandaluyong",
+                style_function = lambda x: {
+                    "color": "black",
+                    "opacity": 0.5,
+                    "fillOpacity": 0.0,
+                    "fillColor": "none",
+                },
+                control = False # this disables toggle
             )
 
-            selected_layer_name = f"Path (Beta={beta})"
+            # show routes for betas
 
-            m.add_gdf(
-                gdf,
-                layer_name = selected_layer_name,
-                style_function = style_selected_betas,
-                control = True,
-                show = show_selected_beta_routes
+            style_selected_betas = lambda x: {
+                "color": "blue",
+                "weight": 10,
+                "opacity": 0.5
+            }
+
+            style_grayed_betas = lambda x: {
+                "color": "gray",
+                "weight": 3,
+                "opacity": 0.5
+            }
+            
+            progressbar = st.progress(int(0), "Finding Routes...")
+
+            for i, beta in enumerate(beta_options):
+                part = i + 1
+                progressbar.progress(100 * part // (4 // 3 * len(beta_options)))
+
+                show_selected_beta_routes = (beta == 0.0)
+
+                edge_mask = beta_to_edge_mask[beta]
+
+                row = {"beta": beta, "geometry": edges.loc[edge_mask].union_all()}
+
+                gdf = gpd.GeoDataFrame([row], crs = "EPSG:4326")
+
+                m.add_gdf(
+                    gdf,
+                    layer_name = f"gray Beta={beta} (NO TOGGLE)",
+                    style_function = style_grayed_betas,
+                    control = False,
+                    show = True
+                )
+
+                selected_layer_name = f"Path (Beta={beta})"
+
+                m.add_gdf(
+                    gdf,
+                    layer_name = selected_layer_name,
+                    style_function = style_selected_betas,
+                    control = True,
+                    show = show_selected_beta_routes
+                )
+            # end loop
+
+            m.add_marker(
+                location = tuple(nodes_selectable.loc[node_o, ["y", "x"]]),
+                tooltip = "Origin",
+                icon = folium.Icon(
+                    prefix = "fa",
+                    icon = "circle-play",
+                    color = "green"
+                )
             )
-        # end loop
-
-        m.add_marker(
-            location = tuple(nodes_selectable.loc[node_o, ["y", "x"]]),
-            tooltip = "Origin",
-            icon = folium.Icon(
-                prefix = "fa",
-                icon = "circle-play",
-                color = "green"
+            
+            m.add_marker(
+                location = tuple(nodes_selectable.loc[node_d, ["y", "x"]]),
+                tooltip = "Destination",
+                icon = folium.Icon(
+                    prefix = "fa",
+                    icon = "flag-checkered",
+                    color = "red",
+                ),
             )
-        )
-        
-        m.add_marker(
-            location = tuple(nodes_selectable.loc[node_d, ["y", "x"]]),
-            tooltip = "Destination",
-            icon = folium.Icon(
-                prefix = "fa",
-                icon = "flag-checkered",
-                color = "red",
-            ),
-        )
 
-        m.fit_bounds(
-            [[14.565835, 121.014223],
-            [14.604602, 121.064785]],
-        )
+            m.fit_bounds(
+                [[14.565835, 121.014223],
+                [14.604602, 121.064785]],
+            )
 
-        # search bar
-        folium.plugins.Geocoder().add_to(m)
+            # search bar
+            folium.plugins.Geocoder().add_to(m)
 
-        m.to_streamlit(height = 400, bidirectional=False)
+            m.to_streamlit(height = 400, bidirectional=False)
 
-        ### likely not needed
-        # if st.button("Refresh"):
-        #     st.rerun(scope = "fragment")
+            progressbar.progress(100)
+
+            progressbar.empty()
 
         return None
     
-    st.divider()
-    
-    show_routes = st.toggle(
-        "Show Routes",
-        value = True
-    )
-
-    if show_routes:
-
-        ss["rerun_just_occurred"] = False
-    
-        show_routes_map()
+    show_routes_map()
 
     st.divider()
 
-    show_curve = st.toggle(
-        f"Compute {topic} Curve",
-        value = False
-    )
+    @st.fragment
+    def show_curve_plot():
 
-    if show_curve:
-
-        @st.cache_data(ttl = None, max_entries = 10)
-        def compute_path_specific_results_for_curve(node_o, node_d, mode):
-            rows = []
-
-            for beta in beta_options:
-
-                ev_distance, ev_discomfort_weighted, ev_discomfort_unweighted = metrics_from_single_optimal_path(
-                    path_nodes = routes_dict[beta][f"{node_o}, {node_d}"],
-                    beta = beta,
-                    sld_function = SLD_meters_b_lookup if (mode == "Cycling") else SLD_meters_w_lookup
-                )
-
-                new_row = {
-                    "beta": beta,
-                    "relative_distance": ev_distance,
-                    "relative_discomfort": ev_discomfort_unweighted # unweighted is the important one
-                    # these are the only necessary columns
-                }
-
-                rows.append(new_row)
-
-            path_specific_results = pd.DataFrame(rows)
-
-            return path_specific_results
-        
-        path_specific_results = compute_path_specific_results_for_curve(node_o, node_d, mode = mode_option)
-
-        display_single_area_analysis(
-            None, # not needed
-            path_specific_results,
-            place_name = "Your Chosen Origin and Destination",
-            mode = topic
+        show_curve = st.toggle(
+            f"Compute {topic} Curve",
+            value = False,
         )
+
+        if show_curve:
+
+            path_specific_results = compute_path_specific_results_for_curve(node_o, node_d, mode = mode_option)
+            
+            progressbar = st.progress(int(75), "Computing curve...")
+
+            display_single_area_analysis(
+                None, # not needed
+                path_specific_results,
+                place_name = "Your Chosen Origin and Destination",
+                mode = topic
+            )
+
+            progressbar.progress(100)
+            progressbar.empty()
+
+        return None
+
+    show_curve_plot()
