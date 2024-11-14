@@ -508,7 +508,7 @@ if __name__ == "__main__":
 
         # show routes for betas
 
-        style_blue_betas = lambda x: {
+        style_selected_betas = lambda x: {
             "color": "blue",
             "weight": 10,
             "opacity": 0.5
@@ -522,7 +522,7 @@ if __name__ == "__main__":
 
         for beta in beta_options:
 
-            show_blue = (beta == 0.0)
+            show_selected_beta_routes = (beta == 0.0)
 
             edge_mask = beta_to_edge_mask[beta]
 
@@ -538,14 +538,14 @@ if __name__ == "__main__":
                 show = True
             )
 
-            blue_layer_name = f"Path (Beta={beta})"
+            selected_layer_name = f"Path (Beta={beta})"
 
             m.add_gdf(
                 gdf,
-                layer_name = blue_layer_name,
-                style_function = style_blue_betas,
+                layer_name = selected_layer_name,
+                style_function = style_selected_betas,
                 control = True,
-                show = show_blue
+                show = show_selected_beta_routes
             )
         # end loop
 
