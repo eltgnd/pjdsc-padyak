@@ -134,7 +134,7 @@ def generate_terms_of_formula(d, ss_weights_key):
 
             current_term = f"(**{round(subcomp_weight, 2)}** x {subcomp_display_name})"
 
-            prefix = "" if len(to_concat) == 0 else "\+ "
+            prefix = "" if len(to_concat) == 0 else "+ "
 
             to_concat.append(prefix + current_term)
 
