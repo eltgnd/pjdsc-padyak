@@ -140,8 +140,6 @@ if __name__ == "__main__":
 
     # Choose origin and destination via node ID
 
-    disable_routes_map = False
-
     method_options = ["Node ID (input identifier of a location)", "Map (click to select points)"]
 
     method_of_node_selection = st.radio(
@@ -149,6 +147,8 @@ if __name__ == "__main__":
         options = (0, 1),
         format_func = lambda x: method_options[x]
     )
+
+    st.divider()
 
     if method_of_node_selection == 0:
 
@@ -174,11 +174,39 @@ if __name__ == "__main__":
 
         if node_o == node_d:
             st.warning("Choose two different points as origin and destination.")
-            disable_routes_map = True
+            st.stop()
 
     elif method_of_node_selection == 1:
     
         # Map for selecting nodes
+
+        if "rerun_just_occurred" not in ss:
+            ss["rerun_just_occurred"] = False
+
+        if "SELECT_ORIGIN_node_was_manually_changed" not in ss:
+            ss["SELECT_ORIGIN_node_was_manually_changed"] = False
+        if "SELECT_DESTINATION_node_was_manually_changed" not in ss:
+            ss["SELECT_DESTINATION_node_was_manually_changed"] = False
+
+
+        # for origin
+        key_prefix = "SELECT_ORIGIN"
+
+        pt_previous_key = f"{key_prefix}_pt_previous"
+        nearest_node_key = f"{key_prefix}_nearest_node"
+        node_was_manually_changed_key = f"{key_prefix}_node_was_manually_changed"
+
+        if pt_previous_key not in ss:
+            ss[pt_previous_key] = None
+
+        if (nearest_node_key not in ss) or (node_was_manually_changed_key not in ss):
+            default_osmid = 1467807116
+            ss[nearest_node_key] = {
+                "Node ID": default_osmid,
+                "Latitude": nodes_selectable.at[default_osmid, "y"],
+                "Longitude": nodes_selectable.at[default_osmid, "x"]
+            }
+            ss[node_was_manually_changed_key] = True
 
         @st.fragment
         def select_node_ORIGIN():
@@ -187,11 +215,7 @@ if __name__ == "__main__":
 
             pt_previous_key = f"{key_prefix}_pt_previous"
             nearest_node_key = f"{key_prefix}_nearest_node"
-
-            if pt_previous_key not in ss:
-                ss[pt_previous_key] = (None,None)
-            if nearest_node_key not in ss:
-                ss[nearest_node_key] = None
+            node_was_manually_changed_key = f"{key_prefix}_node_was_manually_changed"
 
             mapcenter = (14.581912, 121.037947)
 
@@ -231,6 +255,9 @@ if __name__ == "__main__":
                 [14.604602, 121.064785]],
             )
 
+            # search bar
+            folium.plugins.Geocoder().add_to(m1)
+
             col1, col2 = st.columns([3, 1.5])
 
             with col1:
@@ -244,6 +271,8 @@ if __name__ == "__main__":
 
                 if (pt_tuple != ss[pt_previous_key]):
 
+                    ss[node_was_manually_changed_key] = True
+
                     point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
                     point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
 
@@ -252,20 +281,54 @@ if __name__ == "__main__":
                     ss[nearest_node_key] = nearest_node
                     ss[pt_previous_key] = (pt["lng"], pt["lat"])
 
-                    st.rerun(scope = "fragment")
+                    rerun_all = False
+                    if "SELECT_DESTINATION_nearest_node" in ss:
+                        if (ss["SELECT_DESTINATION_nearest_node"] is not None):
+                            rerun_all = True
+
+                    if rerun_all:
+                        if not ss["rerun_just_occurred"]:
+                            ss["rerun_just_occurred"] = True
+                            st.rerun(scope = "app")
+                        # else:
+                        #     if ss["rerun_triggerer"] == "Origin":
+                        #         ss["rerun_just_occurred"] = False
+                    else:
+                        if (not ss["rerun_just_occurred"]):
+                            st.rerun(scope = "fragment")
 
             with col2:
                 with st.container(border = True):
                     st.markdown("**Chosen Origin:**")
-                    if ss['SELECT_ORIGIN_nearest_node'] is not None:
-                        st.markdown(f"Node ID: {ss['SELECT_ORIGIN_nearest_node']['Node ID']}")
-                        st.markdown(f"Latitude: {ss['SELECT_ORIGIN_pt_previous'][1]}")
-                        st.markdown(f"Longitude: {ss['SELECT_ORIGIN_pt_previous'][0]}")
+                    if (ss[nearest_node_key] is not None):
+                        st.markdown(f"Node ID: {ss[nearest_node_key]['Node ID']}")
+                        st.markdown(f"Latitude: {ss[nearest_node_key]['Latitude']}")
+                        st.markdown(f"Longitude: {ss[nearest_node_key]['Longitude']}")
                     else:
                         st.warning("Select an origin point by clicking on the map.")
 
             return None
         
+
+        # for destination
+        key_prefix = "SELECT_DESTINATION"
+
+        pt_previous_key = f"{key_prefix}_pt_previous"
+        nearest_node_key = f"{key_prefix}_nearest_node"
+        node_was_manually_changed_key = f"{key_prefix}_node_was_manually_changed"
+
+        if pt_previous_key not in ss:
+            ss[pt_previous_key] = None
+
+        if (nearest_node_key not in ss) or (node_was_manually_changed_key not in ss):
+            default_osmid = 12101126578
+            ss[nearest_node_key] = {
+                "Node ID": default_osmid,
+                "Latitude": nodes_selectable.at[default_osmid, "y"],
+                "Longitude": nodes_selectable.at[default_osmid, "x"]
+            }
+            ss[node_was_manually_changed_key] = True
+
         @st.fragment
         def select_node_DESTINATION():
 
@@ -273,11 +336,7 @@ if __name__ == "__main__":
 
             pt_previous_key = f"{key_prefix}_pt_previous"
             nearest_node_key = f"{key_prefix}_nearest_node"
-
-            if pt_previous_key not in ss:
-                ss[pt_previous_key] = (None,None)
-            if nearest_node_key not in ss:
-                ss[nearest_node_key] = None
+            node_was_manually_changed_key = f"{key_prefix}_node_was_manually_changed"
 
             mapcenter = (14.581912, 121.037947)
             m2 = leafmap.Map(center = mapcenter)
@@ -316,6 +375,9 @@ if __name__ == "__main__":
                 [14.604602, 121.064785]],
             )
 
+            # search bar
+            folium.plugins.Geocoder().add_to(m2)
+
             col1, col2 = st.columns([3, 1.5])
 
             with col1:
@@ -329,6 +391,8 @@ if __name__ == "__main__":
 
                 if (pt_tuple != ss[pt_previous_key]):
 
+                    ss[node_was_manually_changed_key] = True
+
                     point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
                     point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
 
@@ -337,30 +401,34 @@ if __name__ == "__main__":
                     ss[nearest_node_key] = nearest_node
                     ss[pt_previous_key] = (pt["lng"], pt["lat"])
 
-                    st.rerun(scope = "fragment")
+                    rerun_all = False
+                    if "SELECT_ORIGIN_nearest_node" in ss:
+                        if (ss["SELECT_ORIGIN_nearest_node"] is not None):
+                            rerun_all = True
+
+                    if rerun_all:
+                        if not ss["rerun_just_occurred"]:
+                            ss["rerun_just_occurred"] = True
+                            st.rerun(scope = "app")
+                        # else:
+                        #     if ss["rerun_triggerer"] == "Destination":
+                        #         ss["rerun_just_occurred"] = False
+                    else:
+                        if (not ss["rerun_just_occurred"]):
+                            st.rerun(scope = "fragment")
 
             with col2:
                 with st.container(border = True):
                     st.markdown("**Chosen Destination:**")
-                    if ss['SELECT_DESTINATION_nearest_node'] is not None:
-                        st.markdown(f"Node ID: {ss['SELECT_DESTINATION_nearest_node']['Node ID']}")
-                        st.markdown(f"Latitude: {ss['SELECT_DESTINATION_pt_previous'][1]}")
-                        st.markdown(f"Longitude: {ss['SELECT_DESTINATION_pt_previous'][0]}")
+                    if (ss[nearest_node_key] is not None):
+                        st.markdown(f"Node ID: {ss[nearest_node_key]['Node ID']}")
+                        st.markdown(f"Latitude: {ss[nearest_node_key]['Latitude']}")
+                        st.markdown(f"Longitude: {ss[nearest_node_key]['Longitude']}")
                     else:
                         st.warning("Select a destination point by clicking on the map.")
 
             return None
-
-        ### deprecated, but would be nice if you could restrict it to always have at least one item selected
-
-        # node_type = st.segmented_control(
-        #     "segmented_control",
-        #     options=["Origin", "Destination"],
-        #     selection_mode="single",
-        #     default = "Origin",
-        #     label_visibility="collapsed"
-        # )
-
+        
         if "node_type" not in ss:
             ss["node_type"] = "Origin"
 
@@ -369,12 +437,14 @@ if __name__ == "__main__":
         with col1:
         
             if st.button("Origin"):
-                ss["node_type"] = "Origin"
+                if ss["node_type"] == "Destination":
+                    ss["node_type"] = "Origin"
 
         with col2:
 
             if st.button("Destination"):
-                ss["node_type"] = "Destination"
+                if ss["node_type"] == "Origin":
+                    ss["node_type"] = "Destination"
 
         node_type = ss["node_type"]
 
@@ -393,7 +463,7 @@ if __name__ == "__main__":
 
         if node_o == node_d:
             st.warning("Choose two different points as origin and destination.")
-            disable_routes_map = True
+            st.stop()
 
 
     # Determine path based on beta
@@ -509,24 +579,21 @@ if __name__ == "__main__":
 
         m.to_streamlit(height = 400, bidirectional=False)
 
-        if st.button("Refresh"):
-            st.rerun(scope = "fragment")
+        ### likely not needed
+        # if st.button("Refresh"):
+        #     st.rerun(scope = "fragment")
 
         return None
     
     st.divider()
     
-    @st.fragment
-    def ask_toggle(set_value, disable_routes_map):
-        show_routes = st.toggle(
-            "Show Routes",
-            value = set_value,
-            disabled = disable_routes_map
-        )
-        return show_routes
-    
-    show_routes = ask_toggle(True, disable_routes_map)
+    show_routes = st.toggle(
+        "Show Routes",
+        value = True
+    )
 
     if show_routes:
+
+        ss["rerun_just_occurred"] = False
     
         show_routes_map()
