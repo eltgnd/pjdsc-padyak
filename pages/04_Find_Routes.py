@@ -69,7 +69,7 @@ def metrics_from_single_optimal_path(path_nodes, beta, sld_function, record_rela
 
     return ev_distance, ev_discomfort_weighted, ev_discomfort_unweighted # unweighted comes last in output! it matters
 
-@st.cache_data(ttl = None, max_entries = 10)
+@st.cache_data(ttl = None, max_entries = 1)
 def load_routes_data():
     folder = "discomfort_and_curve_data/routes_data2/"
 
@@ -99,7 +99,7 @@ def load_routes_data():
 
     return b_list_nodes_sampled, w_list_nodes_sampled, bike_routes_dict, walk_routes_dict
 
-@st.cache_data(ttl = None, max_entries = 10)
+@st.cache_data(ttl = None, max_entries = 1)
 def load_nodes_and_edges():
     folder = "discomfort_and_curve_data/"
 
@@ -110,7 +110,7 @@ def load_nodes_and_edges():
 
     return Gb_nodes, Gw_nodes, Gb_edges, Gw_edges
 
-@st.cache_data(ttl = None, max_entries = 10)
+@st.cache_data(ttl = None, max_entries = 1)
 def load_brgy_geo():
     folder = "discomfort_and_curve_data/"
     brgy_geo_for_city = gpd.read_feather(folder + "brgy_geo_for_city.feather").fillna("").select_dtypes(exclude=['datetime']).set_crs("EPSG:4326")
@@ -125,7 +125,7 @@ def load_straight_line_distances():
 
     return distance_matrix_b_SAMPLED_NODES_ONLY, distance_matrix_w_SAMPLED_NODES_ONLY
 
-@st.cache_data(ttl = None, max_entries = 10)
+@st.cache_data(ttl = None, max_entries = 2)
 def compute_path_specific_results_for_curve(node_o, node_d, mode):
     rows = []
 
@@ -203,20 +203,24 @@ if __name__ == "__main__":
     brgy_geo_for_city = ss["brgy_geo_for_city"]
     city_geo = ss["city_geo"]
 
+    beta_options = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+
     # START
     st.markdown("# Find Routes based on Discomfort Sensitivity")
 
     col1, col2, empty = st.columns([2, 2, 1])
     
     with col1:
-        mode_option = st.radio(
-            "Mode of Active Transport",
-            options = ["Cycling", "Walking"],
-            horizontal=True
-        )
 
-    @st.cache_data(ttl = None, max_entries = 5)
-    def get_only_data_necessary(mode):
+        with st.container(border = True):
+            mode_option = st.radio(
+                "Mode of Active Transport",
+                options = ["Cycling", "Walking"],
+                horizontal=True
+            )
+
+    @st.cache_data(ttl = None, max_entries = 2)
+    def get_data_for_selected_mode(mode):
 
         if mode == "Cycling":
             list_nodes_sampled = b_list_nodes_sampled
@@ -241,7 +245,7 @@ if __name__ == "__main__":
 
         return list_nodes_sampled, routes_dict, edges, nodes, nodes_selectable, topic, origin_default_osmid, destination_default_osmid
     
-    list_nodes_sampled, routes_dict, edges, nodes, nodes_selectable, topic, origin_default_osmid, destination_default_osmid = get_only_data_necessary(mode_option)
+    list_nodes_sampled, routes_dict, edges, nodes, nodes_selectable, topic, origin_default_osmid, destination_default_osmid = get_data_for_selected_mode(mode_option)
 
     # Choose origin and destination
 
@@ -268,7 +272,7 @@ if __name__ == "__main__":
             default_index = nodes_selectable.index.to_list().index(origin_default_osmid)
 
             node_o = st.selectbox(
-                "Origin",
+                "Choose Origin",
                 options = nodes_selectable.index,
                 index = default_index,
                 format_func = lambda x: f"Node {x}"
@@ -279,7 +283,7 @@ if __name__ == "__main__":
             default_index = nodes_selectable.index.to_list().index(destination_default_osmid)
 
             node_d = st.selectbox(
-                "Destination",
+                "Choose Destination",
                 options = nodes_selectable.index,
                 index = default_index,
                 format_func = lambda x: f"Node {x}"
@@ -318,9 +322,6 @@ if __name__ == "__main__":
                 "Latitude": nodes_selectable.at[origin_default_osmid, "y"],
                 "Longitude": nodes_selectable.at[origin_default_osmid, "x"]
             }
-            # TEST ONLY
-            ss[nearest_node_key] = None
-            ss[node_was_manually_changed_key] = True
 
         @st.fragment
         def select_node_ORIGIN():
@@ -387,7 +388,7 @@ if __name__ == "__main__":
 
                     ss[node_was_manually_changed_key] = True
 
-                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}], crs = "EPSG:4326")
+                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
                     point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
                     point_df = point_df.set_crs("EPSG:4326")
 
@@ -411,7 +412,7 @@ if __name__ == "__main__":
 
             with col2:
                 with st.container(border = True):
-                    st.markdown("**Chosen Origin:**")
+                    st.markdown("**Your Origin:** 🟢")
                     if (ss[nearest_node_key] is not None):
                         st.markdown(f"Node ID: {ss[nearest_node_key]['Node ID']}")
                         st.markdown(f"Latitude: {ss[nearest_node_key]['Latitude']}")
@@ -504,7 +505,7 @@ if __name__ == "__main__":
 
                     ss[node_was_manually_changed_key] = True
 
-                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}], crs = "EPSG:4326")
+                    point_df = gpd.GeoDataFrame([{"x": pt["lng"], "y": pt["lat"]}])
                     point_df["geometry"] = gpd.points_from_xy(point_df["x"], point_df["y"])
                     point_df = point_df.set_crs("EPSG:4326")
 
@@ -527,7 +528,7 @@ if __name__ == "__main__":
 
             with col2:
                 with st.container(border = True):
-                    st.markdown("**Chosen Destination:**")
+                    st.markdown("**Your Destination:** 🔴")
                     if (ss[nearest_node_key] is not None):
                         st.markdown(f"Node ID: {ss[nearest_node_key]['Node ID']}")
                         st.markdown(f"Latitude: {ss[nearest_node_key]['Latitude']}")
@@ -540,19 +541,25 @@ if __name__ == "__main__":
         if "node_type" not in ss:
             ss["node_type"] = "Origin"
 
-        col1, col2, empty = st.columns([1, 1, 4])
+        col, empty = st.columns([2, 1])
 
-        with col1:
-        
-            if st.button("Origin"):
-                if ss["node_type"] == "Destination":
-                    ss["node_type"] = "Origin"
+        with col:
 
-        with col2:
+            with st.container(border = True):
 
-            if st.button("Destination"):
-                if ss["node_type"] == "Origin":
-                    ss["node_type"] = "Destination"
+                col1, col2 = st.columns([1, 1])    
+
+                with col1:
+                
+                    if st.button("**Choose Origin** 🟢", type = "secondary"):
+                        if ss["node_type"] == "Destination":
+                            ss["node_type"] = "Origin"
+
+                with col2:
+
+                    if st.button("**Choose Destination** 🔴", type = "secondary"):
+                        if ss["node_type"] == "Origin":
+                            ss["node_type"] = "Destination"
 
         node_type = ss["node_type"]
 
@@ -574,11 +581,11 @@ if __name__ == "__main__":
             st.stop()
 
 
-    # Determine path based on beta
-    beta_options = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+        # if ss["rerun_just_occurred"]:
+        #     ss["rerun_just_occurred"] = False
 
     # cache the masks
-    @st.cache_data(ttl = None, max_entries=10)
+    @st.cache_data(ttl = None, max_entries=2)
     def get_edge_masks(node_o, node_d, mode):
         result = {}
         for beta in beta_options:
@@ -592,8 +599,6 @@ if __name__ == "__main__":
 
         return result
 
-    beta_to_edge_mask = get_edge_masks(node_o, node_d, mode = mode_option)
-
     # Map with routes
 
     st.divider()
@@ -603,12 +608,10 @@ if __name__ == "__main__":
 
         show_routes = st.toggle(
             "Show Routes",
-            value = True
+            value = False
         )
 
         if show_routes:
-
-            ss["rerun_just_occurred"] = False
 
             mapcenter = (14.581912, 121.037947)
             m = leafmap.Map(center = mapcenter)
@@ -629,15 +632,17 @@ if __name__ == "__main__":
 
             style_selected_betas = lambda x: {
                 "color": "blue",
-                "weight": 10,
-                "opacity": 0.5
+                "weight": 13,
+                "opacity": 0.5,
             }
 
             style_grayed_betas = lambda x: {
-                "color": "gray",
-                "weight": 3,
-                "opacity": 0.5
+                "color": "white",
+                "weight": 10,
+                "opacity": 0.3,
             }
+
+            beta_to_edge_mask = get_edge_masks(node_o, node_d, mode = mode_option)
             
             progressbar = st.progress(int(0), "Finding Routes...")
 
@@ -657,8 +662,7 @@ if __name__ == "__main__":
                     gdf,
                     layer_name = f"gray Beta={beta} (NO TOGGLE)",
                     style_function = style_grayed_betas,
-                    control = False,
-                    show = True
+                    control = False
                 )
 
                 selected_layer_name = f"Path (Beta={beta})"
@@ -670,6 +674,8 @@ if __name__ == "__main__":
                     control = True,
                     show = show_selected_beta_routes
                 )
+                
+
             # end loop
 
             m.add_marker(
@@ -729,7 +735,7 @@ if __name__ == "__main__":
             display_single_area_analysis(
                 None, # not needed
                 path_specific_results,
-                place_name = "Your Chosen Origin and Destination",
+                place_name = "Your Selected Origin and Destination",
                 mode = topic
             )
 
